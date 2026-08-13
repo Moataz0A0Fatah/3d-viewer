@@ -18,13 +18,30 @@
             max-width: 1200px;
             width: 100%;
         }
+
+        /* --- Header with Logo Icon --- */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+        .header .logo {
+            width: 50px;
+            height: 50px;
+            object-fit: cover;
+            border-radius: 12px;
+            border: 2px solid #444;
+            background: #222;
+        }
         h1 {
             color: #fff;
             font-weight: 300;
-            text-align: center;
-            margin-bottom: 10px;
             font-size: 2.5rem;
             letter-spacing: 2px;
+            margin: 0;
         }
         .subtitle {
             color: #888;
@@ -32,6 +49,7 @@
             margin-bottom: 40px;
             font-size: 1.1rem;
         }
+
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -73,16 +91,24 @@
             color: #666;
             font-size: 0.8rem;
         }
+
         @media (max-width: 600px) {
             .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; }
             h1 { font-size: 1.8rem; }
+            .header .logo { width: 40px; height: 40px; }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>📐 Model Assignments Library</h1>
+        <!-- Header with Logo Image -->
+        <div class="header">
+            <img src="placeholder.jpg" alt="Logo" class="logo" 
+                 onerror="this.style.display='none';">
+            <h1>Model Library</h1>
+        </div>
         <p class="subtitle">Click a model to open it in the full-screen 3D viewer</p>
+
         <div class="grid" id="catalogueGrid"></div>
     </div>
 
@@ -91,9 +117,9 @@
         //  🔧 EDIT THIS LIST: Add your models here (EXACT filenames)
         // ================================================================
         const modelList = [
-            { name: "Modern House", file: "03.glb", thumbnail: "03.jpg" },
-            { name: "Sports Car", file: "01.glb", thumbnail: "01.jpg" }
-            // Add more: { name: "Bridge", file: "03.glb", thumbnail: "03.jpg" }
+            { name: "Modern House", file: "01.glb", thumbnail: "01.jpg" },
+            { name: "Sports Car", file: "03.glb", thumbnail: "03.jpg" }
+            // Add more: { name: "Bridge", file: "bridge.glb", thumbnail: "bridge.jpg" }
         ];
         // ================================================================
 
@@ -109,7 +135,6 @@
                 <span class="click-hint">🖱️ Click to view</span>
             `;
             card.addEventListener('click', () => {
-                // Redirect to the viewer page, passing the model filename
                 window.location.href = `viewer.html?model=${encodeURIComponent(model.file)}`;
             });
             grid.appendChild(card);
