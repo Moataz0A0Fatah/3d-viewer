@@ -78,6 +78,7 @@
 
     <div class="status-msg" id="statusMsg">👈 Select a model from the library</div>
 
+    <!-- 3D Viewer with Environment Image (provides ground plane for shadows) -->
     <model-viewer
         id="mainViewer"
         src=""
@@ -90,6 +91,7 @@
         edge-render="false"
         edge-threshold="0"
         edge-color="#000000"
+        environment-image="https://modelviewer.dev/shared-assets/environments/spruit_sunrise_1k.hdr"
         style="width: 100%; height: 100%;">
     </model-viewer>
 
