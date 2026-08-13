@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Model Catalogue</title>
+    <script src="https://cdn.jsdelivr.net/npm/@google/model-viewer@4.0.0/dist/model-viewer.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+        body { display: flex; height: 100vh; background: #1a1a1a; color: white; overflow: hidden; }
+        .sidebar { width: 260px; min-width: 260px; background: #2a2a2a; padding: 20px 15px; overflow-y: auto; border-right: 2px solid #444; }
+        .sidebar h2 { text-align: center; margin-bottom: 20px; font-weight: 300; border-bottom: 1px solid #444; padding-bottom: 15px; }
+        .catalogue-grid { display: flex; flex-direction: column; gap: 10px; }
+        .model-card { display: flex; align-items: center; gap: 15px; background: #333; padding: 8px 12px; border-radius: 10px; cursor: pointer; transition: all 0.2s; border: 2px solid transparent; }
+        .model-card:hover { background: #3d3d3d; transform: scale(1.02); }
+        .model-card.active { border-color: #4caf50; background: #2e4a2e; }
+        .model-card img { width: 50px; height: 50px; object-fit: cover; border-radius: 6px; background: #555; }
+        .model-card .model-name { font-size: 13px; font-weight: 500; }
+        .viewer-container { flex: 1; height: 100vh; background: #111; position: relative; }
+        model-viewer { width: 100%; height: 100%; background-color: #111; }
+        .placeholder { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #666; font-size: 1.2rem; pointer-events: none; }
+        @media (max-width: 700px) {
+            body { flex-direction: column; }
+            .sidebar { width: 100%; min-width: unset; max-height: 40vh; border-right: none; border-bottom: 2px solid #444; }
+            .catalogue-grid { flex-direction: row; overflow-x: auto; flex-wrap: nowrap; }
+            .model-card { flex-direction: column; min-width: 100px; text-align: center; }
+            .model-card img { width: 70px; height: 70px; }
+            .viewer-container { height: 60vh; }
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>📐 Model Library</h2>
+        <div class="catalogue-grid" id="catalogueGrid"></div>
+    </div>
+    <div class="viewer-container">
+        <model-viewer id="mainViewer" src="" camera-controls touch-action="pan-y" auto-rotate rotation-per-second="10deg" shadow-intensity="0.8" exposure="1"></model-viewer>
+        <div class="placeholder" id="placeholderText">👆 Select a model</div>
+    </div>
+    <script>
+        // ================================================================
+        //  🔧 EDIT THIS SECTION: Replace with YOUR Google Drive File IDs
+        // ================================================================
+        const modelList = [
+            { 
+                name: "Modern House", 
+                file: "https://drive.google.com/uc?export=download&id=1SM-R_fGMohSF5IbM4lT9neHv2KftXoYG", 
+                thumbnail: "https://drive.google.com/uc?export=download&id=18dvM-NboYqQOF6garHMkt5JrlSiHoaC7" 
+            },
+            { 
+                name: "Sports Car", 
+                file: "https://drive.google.com/uc?export=download&id=1PPCYcKihRjKIVghDqH3LAL1eDVE5EwCt", 
+                thumbnail: "https://drive.google.com/uc?export=download&id=1k_uM-Tzf8Ix4tyGzophwhKja6GvSvO8x" 
+            }
+            // Add more models here...
+        ];
+        // ================================================================
+
+        const viewer = document.getElementById('mainViewer');
+        const grid = document.getElementById('catalogueGrid');
+        const placeholder = document.getElementById('placeholderText');
+
+        modelList.forEach((model, index) => {
+            const card = document.createElement('div');
+            card.className = 'model-card';
+            card.innerHTML = `
+                <img src="${model.thumbnail}" alt="${model.name}" 
+                     onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2250%22 height=%2250%22 viewBox=%220 0 50 50%22%3E%3Crect width=%2250%22 height=%2250%22 fill=%22%23333%22/%3E%3Ctext x=%2250%%22 y=%2250%%22 dominant-baseline=%22central%22 text-anchor=%22middle%22 fill=%22%23666%22 font-size=%2210%22%3ENo img%3C/text%3E%3C/svg%3E';">
+                <span class="model-name">${model.name}</span>
+            `;
+            card.addEventListener('click', () => {
+                viewer.src = model.file;
+                placeholder.style.display = 'none';
+                document.querySelectorAll('.model-card').forEach(c => c.classList.remove('active'));
+                card.classList.add('active');
+            });
+            grid.appendChild(card);
+            if (index === 0) {
+                setTimeout(() => {
+                    viewer.src = model.file;
+                    placeholder.style.display = 'none';
+                    card.classList.add('active');
+                }, 300);
+            }
+        });
+
+        viewer.addEventListener('error', () => {
+            placeholder.style.display = 'block';
+            placeholder.textContent = '⚠️ Failed to load. Check Drive permissions & IDs.';
+        });
+    </script>
+</body>
+</html>
