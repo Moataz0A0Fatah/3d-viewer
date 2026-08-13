@@ -97,20 +97,20 @@
             <input type="range" id="exposureSlider" min="0.2" max="2.5" step="0.01" value="1.0">
         </div>
         <div class="control-group">
-            <label>🌓 Shadow Intensity <span id="shadowValue">2.00</span></label>
-            <input type="range" id="shadowSlider" min="0" max="3.0" step="0.01" value="2.0">
+            <label>🌓 Shadow Intensity <span id="shadowValue">3.00</span></label>
+            <input type="range" id="shadowSlider" min="0" max="3.0" step="0.01" value="3.0">
         </div>
         <div class="control-group">
-            <label>🌫️ Shadow Softness <span id="softnessValue">0.20</span></label>
-            <input type="range" id="softnessSlider" min="0.1" max="2.0" step="0.01" value="0.2">
+            <label>🌫️ Shadow Softness <span id="softnessValue">0.10</span></label>
+            <input type="range" id="softnessSlider" min="0.1" max="2.0" step="0.01" value="0.1">
         </div>
         <div class="control-group">
             <label>☀️ Time of Day <span id="timeValue">12:00</span></label>
             <input type="range" id="timeSlider" min="6" max="18" step="0.1" value="12">
         </div>
         <div class="control-group">
-            <label>✏️ Edge Lines <span id="edgeValue">0.50</span></label>
-            <input type="range" id="edgeSlider" min="0" max="1.0" step="0.01" value="0.5">
+            <label>✏️ Edge Lines <span id="edgeValue">0.70</span></label>
+            <input type="range" id="edgeSlider" min="0" max="1.0" step="0.01" value="0.7">
         </div>
         <button class="action-btn" id="resetViewBtn">🎯 Reset View</button>
         <button class="action-btn" id="resetAllBtn">↺ Reset All</button>
@@ -118,10 +118,9 @@
 
     <div class="status-msg" id="statusMsg">👈 Select a model from the library</div>
 
-    <!-- Debug overlay -->
     <div class="debug-overlay" id="debugInfo">
         ☀️ Light: <span id="debugLight">0.50 0.50 0.70</span><br>
-        🌓 Shadow: <span id="debugShadow">2.00</span> | ✏️ Edge: <span id="debugEdge">0.50</span>
+        🌓 Shadow: <span id="debugShadow">3.00</span> | ✏️ Edge: <span id="debugEdge">0.70</span>
     </div>
 
     <model-viewer
@@ -129,12 +128,12 @@
         src=""
         camera-controls
         touch-action="pan-y"
-        shadow-intensity="2.0"
-        shadow-softness="0.2"
+        shadow-intensity="3.0"
+        shadow-softness="0.1"
         exposure="1.0"
         light-direction="0.5 0.5 0.7"
         edge-render="true"
-        edge-threshold="0.5"
+        edge-threshold="0.7"
         edge-color="#000000"
         environment-image="legacy"
         interpolation-decay="200"
@@ -171,11 +170,17 @@
         const urlParams = new URLSearchParams(window.location.search);
         const modelFile = urlParams.get('model');
 
-        // --- Fit model function ---
+        // --- Corrected Fit function ---
         function fitModel() {
             try {
-                const box = viewer.getBoundingBox();
-                if (!box) return;
+                // Get the model's scene (the underlying Three.js object)
+                const model = viewer.model;
+                if (!model) {
+                    console.warn('Model not loaded yet');
+                    return;
+                }
+                // Compute bounding box of the model
+                const box = new THREE.Box3().setFromObject(model);
                 const size = box.max.sub(box.min);
                 const maxDim = Math.max(size.x, size.y, size.z);
                 // Distance factor – adjust as needed
@@ -184,6 +189,8 @@
                 console.log(`🎯 Camera distance set to ${distance}`);
             } catch(e) {
                 console.warn('Fit failed:', e);
+                // Fallback to a default distance
+                viewer.cameraOrbit = `0deg 75deg 200%`;
             }
         }
 
@@ -262,24 +269,24 @@
                 exposureVal.textContent = '1.00';
                 viewer.exposure = 1.0;
 
-                shadowSlider.value = '2.0';
-                shadowVal.textContent = '2.00';
-                viewer.shadowIntensity = 2.0;
-                debugShadow.textContent = '2.00';
+                shadowSlider.value = '3.0';
+                shadowVal.textContent = '3.00';
+                viewer.shadowIntensity = 3.0;
+                debugShadow.textContent = '3.00';
 
-                softnessSlider.value = '0.2';
-                softnessVal.textContent = '0.20';
-                viewer.shadowSoftness = 0.2;
+                softnessSlider.value = '0.1';
+                softnessVal.textContent = '0.10';
+                viewer.shadowSoftness = 0.1;
 
                 timeSlider.value = '12';
                 timeVal.textContent = '12:00';
                 updateSunDirection(12);
 
-                edgeSlider.value = '0.5';
-                edgeVal.textContent = '0.50';
-                viewer.edgeThreshold = 0.5;
+                edgeSlider.value = '0.7';
+                edgeVal.textContent = '0.70';
+                viewer.edgeThreshold = 0.7;
                 viewer.edgeRender = true;
-                debugEdge.textContent = '0.50';
+                debugEdge.textContent = '0.70';
 
                 fitModel();
                 console.log('🔄 Reset all');
