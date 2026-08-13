@@ -34,8 +34,21 @@
         input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #4caf50; cursor: pointer; }
         .checkbox-group { display: flex; align-items: center; gap: 8px; color: #aaa; font-size: 0.75rem; }
         .checkbox-group input[type="checkbox"] { accent-color: #4caf50; width: 16px; height: 16px; cursor: pointer; }
-        .reset-btn { background: rgba(76,175,80,0.3); color: #4caf50; border: 1px solid #4caf50; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 0.8rem; font-weight: 500; transition: all 0.2s; text-align: center; margin-top: 4px; }
-        .reset-btn:hover { background: rgba(76,175,80,0.5); transform: scale(1.02); }
+        .action-btn {
+            background: rgba(76,175,80,0.3);
+            color: #4caf50;
+            border: 1px solid #4caf50;
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            text-align: center;
+            margin-top: 4px;
+        }
+        .action-btn:hover { background: rgba(76,175,80,0.5); transform: scale(1.02); }
+
         .back-btn {
             position: absolute; top: 20px; left: 20px; z-index: 20;
             background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
@@ -55,10 +68,17 @@
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             color: #888; font-size: 1.2rem; pointer-events: none; text-align: center; z-index: 0;
         }
+        .debug-overlay {
+            position: absolute; bottom: 110px; left: 30px; z-index: 20;
+            color: #666; font-size: 0.7rem; font-family: monospace;
+            background: rgba(0,0,0,0.7); padding: 8px 12px; border-radius: 8px;
+            border: 1px solid #333; line-height: 1.6; pointer-events: none;
+        }
         @media (max-width: 600px) {
             .controls-panel { bottom: 15px; right: 15px; padding: 12px 16px; min-width: 170px; max-height: 60vh; gap: 8px; }
             .back-btn { top: 15px; left: 15px; padding: 8px 16px; font-size: 0.85rem; }
             .model-title { top: 15px; right: 15px; padding: 6px 14px; font-size: 0.75rem; }
+            .debug-overlay { display: none; }
         }
     </style>
 </head>
@@ -81,8 +101,8 @@
             <input type="range" id="shadowSlider" min="0" max="3.0" step="0.01" value="2.0">
         </div>
         <div class="control-group">
-            <label>🌫️ Shadow Softness <span id="softnessValue">0.30</span></label>
-            <input type="range" id="softnessSlider" min="0.1" max="2.0" step="0.01" value="0.3">
+            <label>🌫️ Shadow Softness <span id="softnessValue">0.20</span></label>
+            <input type="range" id="softnessSlider" min="0.1" max="2.0" step="0.01" value="0.2">
         </div>
         <div class="control-group">
             <label>☀️ Time of Day <span id="timeValue">12:00</span></label>
@@ -92,10 +112,17 @@
             <label>✏️ Edge Lines <span id="edgeValue">0.50</span></label>
             <input type="range" id="edgeSlider" min="0" max="1.0" step="0.01" value="0.5">
         </div>
-        <button class="reset-btn" id="resetBtn">↺ Reset All</button>
+        <button class="action-btn" id="resetViewBtn">🎯 Reset View</button>
+        <button class="action-btn" id="resetAllBtn">↺ Reset All</button>
     </div>
 
     <div class="status-msg" id="statusMsg">👈 Select a model from the library</div>
+
+    <!-- Debug overlay -->
+    <div class="debug-overlay" id="debugInfo">
+        ☀️ Light: <span id="debugLight">0.50 0.50 0.70</span><br>
+        🌓 Shadow: <span id="debugShadow">2.00</span> | ✏️ Edge: <span id="debugEdge">0.50</span>
+    </div>
 
     <model-viewer
         id="mainViewer"
@@ -103,14 +130,14 @@
         camera-controls
         touch-action="pan-y"
         shadow-intensity="2.0"
-        shadow-softness="0.3"
+        shadow-softness="0.2"
         exposure="1.0"
         light-direction="0.5 0.5 0.7"
         edge-render="true"
         edge-threshold="0.5"
         edge-color="#000000"
         environment-image="legacy"
-        camera-orbit="0deg 75deg 100%"
+        interpolation-decay="200"
         style="width: 100%; height: 100%;">
     </model-viewer>
 
@@ -121,7 +148,7 @@
         const titleEl = document.getElementById('modelTitle');
         const statusMsg = document.getElementById('statusMsg');
 
-        // --- DOM refs for controls ---
+        // --- DOM refs ---
         const exposureSlider = document.getElementById('exposureSlider');
         const exposureVal = document.getElementById('exposureValue');
         const shadowSlider = document.getElementById('shadowSlider');
@@ -133,30 +160,31 @@
         const edgeSlider = document.getElementById('edgeSlider');
         const edgeVal = document.getElementById('edgeValue');
         const autoRotateCheck = document.getElementById('autoRotateCheck');
-        const resetBtn = document.getElementById('resetBtn');
+
+        const resetViewBtn = document.getElementById('resetViewBtn');
+        const resetAllBtn = document.getElementById('resetAllBtn');
+
+        const debugLight = document.getElementById('debugLight');
+        const debugShadow = document.getElementById('debugShadow');
+        const debugEdge = document.getElementById('debugEdge');
 
         const urlParams = new URLSearchParams(window.location.search);
         const modelFile = urlParams.get('model');
 
-        // --- Auto-fit function ---
+        // --- Fit model function ---
         function fitModel() {
-            // Wait a frame for the model to be fully loaded
-            requestAnimationFrame(() => {
-                try {
-                    const box = viewer.getBoundingBox();
-                    if (!box) return;
-                    // Compute diagonal size
-                    const size = box.max.sub(box.min);
-                    const maxDim = Math.max(size.x, size.y, size.z);
-                    // Camera distance for a 45° FOV: distance = (maxDim / 2) / tan(fov/2)
-                    // model-viewer default FOV ~ 45°, so we use a factor.
-                    const distance = maxDim * 1.5; // works well
-                    viewer.cameraOrbit = `0deg 75deg ${distance}%`;
-                    console.log(`📐 Auto-fit: distance = ${distance}`);
-                } catch(e) {
-                    console.warn('Auto-fit failed:', e);
-                }
-            });
+            try {
+                const box = viewer.getBoundingBox();
+                if (!box) return;
+                const size = box.max.sub(box.min);
+                const maxDim = Math.max(size.x, size.y, size.z);
+                // Distance factor – adjust as needed
+                const distance = maxDim * 1.8;
+                viewer.cameraOrbit = `0deg 75deg ${distance}%`;
+                console.log(`🎯 Camera distance set to ${distance}`);
+            } catch(e) {
+                console.warn('Fit failed:', e);
+            }
         }
 
         if (modelFile) {
@@ -170,21 +198,26 @@
                 viewer.autoRotate = autoRotateCheck.checked;
                 viewer.rotationPerSecond = autoRotateCheck.checked ? '10deg' : '0deg';
             });
+
             exposureSlider.addEventListener('input', () => {
                 const val = parseFloat(exposureSlider.value);
                 viewer.exposure = val;
                 exposureVal.textContent = val.toFixed(2);
             });
+
             shadowSlider.addEventListener('input', () => {
                 const val = parseFloat(shadowSlider.value);
                 viewer.shadowIntensity = val;
                 shadowVal.textContent = val.toFixed(2);
+                debugShadow.textContent = val.toFixed(2);
             });
+
             softnessSlider.addEventListener('input', () => {
                 const val = parseFloat(softnessSlider.value);
                 viewer.shadowSoftness = val;
                 softnessVal.textContent = val.toFixed(2);
             });
+
             function updateSunDirection(time) {
                 const t = (time - 6) / 12;
                 const azimuthDeg = 90 + t * 180;
@@ -195,8 +228,10 @@
                 const y = Math.sin(elevationRad);
                 const z = Math.sin(azimuthRad) * Math.cos(elevationRad);
                 viewer.lightDirection = `${x} ${y} ${z}`;
-                console.log(`☀️ Light direction: ${x.toFixed(2)} ${y.toFixed(2)} ${z.toFixed(2)}`);
+                debugLight.textContent = `${x.toFixed(2)} ${y.toFixed(2)} ${z.toFixed(2)}`;
+                console.log(`☀️ Light: ${x.toFixed(2)} ${y.toFixed(2)} ${z.toFixed(2)}`);
             }
+
             timeSlider.addEventListener('input', () => {
                 const time = parseFloat(timeSlider.value);
                 const hours = Math.floor(time);
@@ -204,54 +239,68 @@
                 timeVal.textContent = `${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}`;
                 updateSunDirection(time);
             });
+
             edgeSlider.addEventListener('input', () => {
                 const val = parseFloat(edgeSlider.value);
                 edgeVal.textContent = val.toFixed(2);
                 viewer.edgeThreshold = val;
                 viewer.edgeRender = val > 0.001;
-                console.log(`✏️ Edge threshold: ${val}, render: ${viewer.edgeRender}`);
+                debugEdge.textContent = val.toFixed(2);
+                console.log(`✏️ Edge: ${val}`);
             });
-            resetBtn.addEventListener('click', () => {
+
+            // --- Reset View ---
+            resetViewBtn.addEventListener('click', fitModel);
+
+            // --- Reset All ---
+            resetAllBtn.addEventListener('click', () => {
                 autoRotateCheck.checked = false;
                 viewer.autoRotate = false;
                 viewer.rotationPerSecond = '0deg';
+
                 exposureSlider.value = '1.0';
                 exposureVal.textContent = '1.00';
                 viewer.exposure = 1.0;
+
                 shadowSlider.value = '2.0';
                 shadowVal.textContent = '2.00';
                 viewer.shadowIntensity = 2.0;
-                softnessSlider.value = '0.3';
-                softnessVal.textContent = '0.30';
-                viewer.shadowSoftness = 0.3;
+                debugShadow.textContent = '2.00';
+
+                softnessSlider.value = '0.2';
+                softnessVal.textContent = '0.20';
+                viewer.shadowSoftness = 0.2;
+
                 timeSlider.value = '12';
                 timeVal.textContent = '12:00';
                 updateSunDirection(12);
+
                 edgeSlider.value = '0.5';
                 edgeVal.textContent = '0.50';
                 viewer.edgeThreshold = 0.5;
                 viewer.edgeRender = true;
-                // Also reset camera
+                debugEdge.textContent = '0.50';
+
                 fitModel();
-                console.log('🔄 Reset all controls');
+                console.log('🔄 Reset all');
             });
 
-            // --- Initialize ---
+            // --- Init ---
             updateSunDirection(12);
             timeVal.textContent = '12:00';
             viewer.autoRotate = false;
             viewer.rotationPerSecond = '0deg';
 
-            // --- On load, fit model ---
+            // --- On load ---
             viewer.addEventListener('load', () => {
                 statusMsg.style.display = 'none';
                 console.log('✅ Model loaded');
-                // Force shadow and edge settings
+                // Apply current settings
                 viewer.shadowIntensity = parseFloat(shadowSlider.value);
                 viewer.shadowSoftness = parseFloat(softnessSlider.value);
                 viewer.edgeRender = parseFloat(edgeSlider.value) > 0.001;
                 viewer.edgeThreshold = parseFloat(edgeSlider.value);
-                // Auto-fit
+                // Fit once
                 fitModel();
             });
 
