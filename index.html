@@ -3,108 +3,116 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Model Catalogue</title>
-    
-    <!-- 1. IMPORT MAP: Tells the browser where to find the 3D viewer -->
-    <script type="importmap">
-    {
-        "imports": {
-            "@google/model-viewer": "https://cdn.jsdelivr.net/npm/@google/model-viewer@4.0.0/dist/model-viewer.min.js"
-        }
-    }
-    </script>
-
+    <title>3D Model Library</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
-        body { display: flex; height: 100vh; background: #1a1a1a; color: white; overflow: hidden; }
-        .sidebar { width: 260px; min-width: 260px; background: #2a2a2a; padding: 20px 15px; overflow-y: auto; border-right: 2px solid #444; }
-        .sidebar h2 { text-align: center; margin-bottom: 20px; font-weight: 300; border-bottom: 1px solid #444; padding-bottom: 15px; }
-        .catalogue-grid { display: flex; flex-direction: column; gap: 10px; }
-        .model-card { display: flex; align-items: center; gap: 15px; background: #333; padding: 8px 12px; border-radius: 10px; cursor: pointer; transition: all 0.2s; border: 2px solid transparent; }
-        .model-card:hover { background: #3d3d3d; transform: scale(1.02); }
-        .model-card.active { border-color: #4caf50; background: #2e4a2e; }
-        .model-card img { width: 50px; height: 50px; object-fit: cover; border-radius: 6px; background: #555; }
-        .model-card .model-name { font-size: 13px; font-weight: 500; }
-        .viewer-container { flex: 1; height: 100vh; background: #111; position: relative; }
-        model-viewer { width: 100%; height: 100%; background-color: #111; }
-        .placeholder { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #666; font-size: 1.2rem; pointer-events: none; text-align: center; }
-        @media (max-width: 700px) {
-            body { flex-direction: column; }
-            .sidebar { width: 100%; min-width: unset; max-height: 40vh; border-right: none; border-bottom: 2px solid #444; }
-            .catalogue-grid { flex-direction: row; overflow-x: auto; flex-wrap: nowrap; }
-            .model-card { flex-direction: column; min-width: 100px; text-align: center; }
-            .model-card img { width: 70px; height: 70px; }
-            .viewer-container { height: 60vh; }
+        body {
+            background: #1a1a1a;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 1200px;
+            width: 100%;
+        }
+        h1 {
+            color: #fff;
+            font-weight: 300;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.5rem;
+            letter-spacing: 2px;
+        }
+        .subtitle {
+            color: #888;
+            text-align: center;
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 30px;
+        }
+        .model-card {
+            background: #2a2a2a;
+            border-radius: 16px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+            text-align: center;
+            padding-bottom: 15px;
+        }
+        .model-card:hover {
+            transform: translateY(-10px);
+            border-color: #4caf50;
+            background: #333;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.6);
+        }
+        .model-card img {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            object-fit: cover;
+            background: #111;
+            display: block;
+            border-bottom: 1px solid #444;
+        }
+        .model-card .model-name {
+            display: block;
+            color: #eee;
+            font-size: 1.1rem;
+            font-weight: 500;
+            padding: 15px 10px 5px 10px;
+        }
+        .model-card .click-hint {
+            display: block;
+            color: #666;
+            font-size: 0.8rem;
+        }
+        @media (max-width: 600px) {
+            .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; }
+            h1 { font-size: 1.8rem; }
         }
     </style>
 </head>
 <body>
-    <div class="sidebar">
-        <h2>📐 Model Library</h2>
-        <div class="catalogue-grid" id="catalogueGrid"></div>
-    </div>
-    <div class="viewer-container">
-        <model-viewer id="mainViewer" src="" camera-controls touch-action="pan-y" auto-rotate rotation-per-second="10deg" shadow-intensity="0.8" exposure="1"></model-viewer>
-        <div class="placeholder" id="placeholderText">👆 Select a model</div>
+    <div class="container">
+        <h1>📐 Model Library</h1>
+        <p class="subtitle">Click a model to open it in the full-screen 3D viewer</p>
+        <div class="grid" id="catalogueGrid"></div>
     </div>
 
-    <!-- 2. MODULE SCRIPT: This loads the viewer and runs your code -->
-    <script type="module">
-        // Import the 3D viewer library
-        import "@google/model-viewer";
-
+    <script>
         // ================================================================
-        //  🔧 EDIT THIS LIST: Use EXACT filenames (case-sensitive)
+        //  🔧 EDIT THIS LIST: Add your models here (EXACT filenames)
         // ================================================================
         const modelList = [
-            { name: "Modern House", file: "01.glb", thumbnail: "01.jpg" },
-            { name: "Sports Car", file: "03.glb", thumbnail: "03.jpg" }
-            // Add more: { name: "Bridge", file: "bridge.glb", thumbnail: "bridge.jpg" }
+            { name: "Modern House", file: "03.glb", thumbnail: "03.jpg" },
+            { name: "Sports Car", file: "01.glb", thumbnail: "01.jpg" }
+            // Add more: { name: "Bridge", file: "03.glb", thumbnail: "03.jpg" }
         ];
         // ================================================================
 
-        const viewer = document.getElementById('mainViewer');
         const grid = document.getElementById('catalogueGrid');
-        const placeholder = document.getElementById('placeholderText');
 
-        modelList.forEach((model, index) => {
+        modelList.forEach((model) => {
             const card = document.createElement('div');
             card.className = 'model-card';
             card.innerHTML = `
-                <img src="${model.thumbnail}" alt="${model.name}" 
-                     onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2250%22 height=%2250%22 viewBox=%220 0 50 50%22%3E%3Crect width=%2250%22 height=%2250%22 fill=%22%23333%22/%3E%3Ctext x=%2250%%22 y=%2250%%22 dominant-baseline=%22central%22 text-anchor=%22middle%22 fill=%22%23666%22 font-size=%2210%22%3ENo img%3C/text%3E%3C/svg%3E';">
+                <img src="${model.thumbnail}" alt="${model.name}"
+                     onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22 viewBox=%220 0 200 200%22%3E%3Crect width=%22200%22 height=%22200%22 fill=%22%23222%22/%3E%3Ctext x=%2250%%22 y=%2250%%22 dominant-baseline=%22central%22 text-anchor=%22middle%22 fill=%22%23666%22 font-size=%2216%22%3ENo Image%3C/text%3E%3C/svg%3E';">
                 <span class="model-name">${model.name}</span>
+                <span class="click-hint">🖱️ Click to view</span>
             `;
             card.addEventListener('click', () => {
-                viewer.src = model.file;
-                placeholder.style.display = 'block';
-                placeholder.textContent = `⏳ Loading ${model.name}...`;
-                document.querySelectorAll('.model-card').forEach(c => c.classList.remove('active'));
-                card.classList.add('active');
+                // Redirect to the viewer page, passing the model filename
+                window.location.href = `viewer.html?model=${encodeURIComponent(model.file)}`;
             });
             grid.appendChild(card);
-            if (index === 0) {
-                setTimeout(() => {
-                    viewer.src = model.file;
-                    placeholder.style.display = 'block';
-                    placeholder.textContent = `⏳ Loading ${model.name}...`;
-                    card.classList.add('active');
-                }, 300);
-            }
-        });
-
-        // --- Success Handler ---
-        viewer.addEventListener('load', () => {
-            placeholder.style.display = 'none';
-            console.log('✅ Model loaded successfully!');
-        });
-
-        // --- Error Handler ---
-        viewer.addEventListener('error', (event) => {
-            const errorMsg = event.detail?.message || 'Unknown error.';
-            placeholder.style.display = 'block';
-            placeholder.textContent = `❌ Failed: ${errorMsg}`;
-            console.error('Model loading error:', event.detail);
         });
     </script>
 </body>
