@@ -40,20 +40,12 @@
     </div>
     <script>
         // ================================================================
-        //  🔧 EDIT THIS SECTION: Replace with YOUR Google Drive File IDs
+        //  🔧 LIST YOUR MODELS HERE (use exact filenames, case-sensitive)
         // ================================================================
         const modelList = [
-            { 
-                name: "Modern House", 
-                file: "https://drive.google.com/uc?export=download&id=1SM-R_fGMohSF5IbM4lT9neHv2KftXoYG", 
-                thumbnail: "https://drive.google.com/uc?export=download&id=18dvM-NboYqQOF6garHMkt5JrlSiHoaC7" 
-            },
-            { 
-                name: "Sports Car", 
-                file: "https://drive.google.com/uc?export=download&id=1PPCYcKihRjKIVghDqH3LAL1eDVE5EwCt", 
-                thumbnail: "https://drive.google.com/uc?export=download&id=1k_uM-Tzf8Ix4tyGzophwhKja6GvSvO8x" 
-            }
-            // Add more models here...
+            { name: "Modern House", file: "01.glb", thumbnail: "01.jpg" },
+            { name: "Sports Car", file: "03.glb", thumbnail: "03.jpg" }
+            // Add more: { name: "Bridge", file: "bridge.glb", thumbnail: "bridge.jpg" }
         ];
         // ================================================================
 
@@ -87,7 +79,7 @@
 
         viewer.addEventListener('error', () => {
             placeholder.style.display = 'block';
-            placeholder.textContent = '⚠️ Failed to load. Check Drive permissions & IDs.';
+            placeholder.textContent = '⚠️ Failed to load: ' + viewer.src;
         });
     </script>
 </body>
