@@ -23,7 +23,6 @@
             position: relative;
         }
 
-        /* Full-screen 3D Viewer */
         model-viewer {
             width: 100vw;
             height: 100vh;
@@ -31,7 +30,81 @@
             display: block;
         }
 
-        /* Back Button (Top-Left) */
+        /* --- Controls Panel --- */
+        .controls-panel {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            z-index: 20;
+            background: rgba(20, 20, 20, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 18px 22px;
+            border-radius: 16px;
+            border: 1px solid #444;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-width: 200px;
+            box-shadow: 0 4px 30px rgba(0,0,0,0.8);
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .controls-panel::-webkit-scrollbar { width: 4px; }
+        .controls-panel::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .control-group label {
+            color: #aaa;
+            font-size: 0.75rem;
+            font-weight: 300;
+            letter-spacing: 0.5px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .control-group label span {
+            color: #eee;
+            font-weight: 500;
+        }
+        input[type="range"] {
+            width: 100%;
+            accent-color: #4caf50;
+            background: #444;
+            height: 4px;
+            border-radius: 2px;
+            cursor: pointer;
+            -webkit-appearance: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #4caf50;
+            cursor: pointer;
+        }
+
+        .reset-btn {
+            background: rgba(76, 175, 80, 0.3);
+            color: #4caf50;
+            border: 1px solid #4caf50;
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            text-align: center;
+            margin-top: 4px;
+        }
+        .reset-btn:hover {
+            background: rgba(76, 175, 80, 0.5);
+            transform: scale(1.02);
+        }
+
         .back-btn {
             position: absolute;
             top: 20px;
@@ -58,7 +131,6 @@
             transform: scale(1.05);
         }
 
-        /* Model Name (Top-Right) */
         .model-title {
             position: absolute;
             top: 20px;
@@ -74,45 +146,6 @@
             pointer-events: none;
         }
 
-        /* EXPOSURE SLIDER (Bottom-Right) */
-        .controls {
-            position: absolute;
-            bottom: 30px;
-            right: 30px;
-            z-index: 20;
-            background: rgba(30, 30, 30, 0.85);
-            backdrop-filter: blur(8px);
-            padding: 15px 20px;
-            border-radius: 12px;
-            border: 1px solid #444;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 5px;
-            min-width: 160px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.6);
-        }
-        .controls label {
-            color: #aaa;
-            font-size: 0.8rem;
-            letter-spacing: 1px;
-            font-weight: 300;
-        }
-        .controls input[type="range"] {
-            width: 100%;
-            accent-color: #4caf50;
-            background: #444;
-            height: 4px;
-            border-radius: 2px;
-            cursor: pointer;
-        }
-        .controls .value {
-            color: #eee;
-            font-size: 0.8rem;
-            font-weight: 500;
-        }
-
-        /* Status / Error Message */
         .status-msg {
             position: absolute;
             top: 50%;
@@ -126,9 +159,16 @@
         }
 
         @media (max-width: 600px) {
+            .controls-panel {
+                bottom: 15px;
+                right: 15px;
+                padding: 12px 16px;
+                min-width: 160px;
+                max-height: 60vh;
+                gap: 8px;
+            }
             .back-btn { top: 15px; left: 15px; padding: 8px 16px; font-size: 0.85rem; }
             .model-title { top: 15px; right: 15px; padding: 6px 14px; font-size: 0.75rem; }
-            .controls { bottom: 20px; right: 20px; padding: 12px 15px; min-width: 140px; }
         }
     </style>
 </head>
@@ -140,17 +180,40 @@
     <!-- Model Name -->
     <div class="model-title" id="modelTitle">Loading...</div>
 
-    <!-- Exposure Controls -->
-    <div class="controls">
-        <label for="exposureSlider">🔆 Brightness</label>
-        <input type="range" id="exposureSlider" min="0.2" max="2.5" step="0.01" value="1.0">
-        <span class="value" id="exposureValue">1.00</span>
+    <!-- Controls Panel -->
+    <div class="controls-panel">
+        <!-- Brightness -->
+        <div class="control-group">
+            <label>🔆 Brightness <span id="exposureValue">1.00</span></label>
+            <input type="range" id="exposureSlider" min="0.2" max="2.5" step="0.01" value="1.0">
+        </div>
+
+        <!-- Shadow Intensity -->
+        <div class="control-group">
+            <label>🌓 Shadow Intensity <span id="shadowValue">1.00</span></label>
+            <input type="range" id="shadowSlider" min="0" max="2.0" step="0.01" value="1.0">
+        </div>
+
+        <!-- Time of Day -->
+        <div class="control-group">
+            <label>☀️ Time of Day <span id="timeValue">12:00</span></label>
+            <input type="range" id="timeSlider" min="6" max="18" step="0.1" value="12">
+        </div>
+
+        <!-- Edge Lines -->
+        <div class="control-group">
+            <label>✏️ Edge Lines <span id="edgeValue">0.00</span></label>
+            <input type="range" id="edgeSlider" min="0" max="1.0" step="0.01" value="0">
+        </div>
+
+        <!-- Reset Button -->
+        <button class="reset-btn" id="resetBtn">↺ Reset All</button>
     </div>
 
     <!-- Status Message -->
     <div class="status-msg" id="statusMsg">👈 Select a model from the library</div>
 
-    <!-- The 3D Viewer -->
+    <!-- 3D Viewer -->
     <model-viewer
         id="mainViewer"
         src=""
@@ -160,6 +223,10 @@
         rotation-per-second="10deg"
         shadow-intensity="1.0"
         exposure="1.0"
+        light-direction="0 1 0"
+        edge-render="false"
+        edge-threshold="0"
+        edge-color="#000000"
         style="width: 100%; height: 100%;">
     </model-viewer>
 
@@ -169,10 +236,19 @@
         const viewer = document.getElementById('mainViewer');
         const titleEl = document.getElementById('modelTitle');
         const statusMsg = document.getElementById('statusMsg');
-        const slider = document.getElementById('exposureSlider');
-        const exposureVal = document.getElementById('exposureValue');
 
-        // --- Get the model from the URL ---
+        // Slider elements
+        const exposureSlider = document.getElementById('exposureSlider');
+        const exposureVal = document.getElementById('exposureValue');
+        const shadowSlider = document.getElementById('shadowSlider');
+        const shadowVal = document.getElementById('shadowValue');
+        const timeSlider = document.getElementById('timeSlider');
+        const timeVal = document.getElementById('timeValue');
+        const edgeSlider = document.getElementById('edgeSlider');
+        const edgeVal = document.getElementById('edgeValue');
+        const resetBtn = document.getElementById('resetBtn');
+
+        // --- Get model from URL ---
         const urlParams = new URLSearchParams(window.location.search);
         const modelFile = urlParams.get('model');
 
@@ -180,18 +256,79 @@
             viewer.src = modelFile;
             statusMsg.style.display = 'none';
 
-            // Extract name for display
             const displayName = modelFile.replace(/\.glb$/i, '').replace(/[-_]/g, ' ');
             titleEl.textContent = `📐 ${displayName}`;
 
-            // --- Exposure Slider Logic ---
-            slider.addEventListener('input', () => {
-                const val = parseFloat(slider.value);
+            // --- Functions to update slider displays ---
+            function updateSunDirection(time) {
+                const t = (time - 6) / 12;
+                const azimuthDeg = 90 + t * 180;
+                const elevationDeg = 60 * Math.sin(Math.PI * t);
+                const azimuthRad = azimuthDeg * Math.PI / 180;
+                const elevationRad = elevationDeg * Math.PI / 180;
+                const x = Math.cos(azimuthRad) * Math.cos(elevationRad);
+                const y = Math.sin(elevationRad);
+                const z = Math.sin(azimuthRad) * Math.cos(elevationRad);
+                viewer.lightDirection = `${x} ${y} ${z}`;
+            }
+
+            // --- Event listeners ---
+            exposureSlider.addEventListener('input', () => {
+                const val = parseFloat(exposureSlider.value);
                 viewer.exposure = val;
                 exposureVal.textContent = val.toFixed(2);
             });
 
-            // --- Error Handling ---
+            shadowSlider.addEventListener('input', () => {
+                const val = parseFloat(shadowSlider.value);
+                viewer.shadowIntensity = val;
+                shadowVal.textContent = val.toFixed(2);
+            });
+
+            timeSlider.addEventListener('input', () => {
+                const time = parseFloat(timeSlider.value);
+                const hours = Math.floor(time);
+                const minutes = Math.round((time - hours) * 60);
+                timeVal.textContent = `${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}`;
+                updateSunDirection(time);
+            });
+
+            edgeSlider.addEventListener('input', () => {
+                const val = parseFloat(edgeSlider.value);
+                edgeVal.textContent = val.toFixed(2);
+                if (val > 0) {
+                    viewer.edgeRender = true;
+                    viewer.edgeThreshold = val;
+                } else {
+                    viewer.edgeRender = false;
+                }
+            });
+
+            // --- Reset All ---
+            resetBtn.addEventListener('click', () => {
+                // Reset sliders to default values
+                exposureSlider.value = '1.0';
+                exposureVal.textContent = '1.00';
+                viewer.exposure = 1.0;
+
+                shadowSlider.value = '1.0';
+                shadowVal.textContent = '1.00';
+                viewer.shadowIntensity = 1.0;
+
+                timeSlider.value = '12';
+                timeVal.textContent = '12:00';
+                updateSunDirection(12);
+
+                edgeSlider.value = '0';
+                edgeVal.textContent = '0.00';
+                viewer.edgeRender = false;
+            });
+
+            // Initialize
+            updateSunDirection(12);
+            timeVal.textContent = '12:00';
+
+            // Error handling
             viewer.addEventListener('error', (event) => {
                 statusMsg.style.display = 'block';
                 statusMsg.textContent = `❌ Failed to load "${modelFile}". Check filename.`;
@@ -199,7 +336,6 @@
                 console.error('Model error:', event.detail);
             });
 
-            // --- Success ---
             viewer.addEventListener('load', () => {
                 statusMsg.style.display = 'none';
                 console.log('✅ Model loaded!');
