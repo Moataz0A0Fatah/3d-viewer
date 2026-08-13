@@ -4,7 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Model Catalogue</title>
-    <script src="https://cdn.jsdelivr.net/npm/@google/model-viewer@4.0.0/dist/model-viewer.min.js"></script>
+    
+    <!-- 1. IMPORT MAP: Tells the browser where to find the 3D viewer -->
+    <script type="importmap">
+    {
+        "imports": {
+            "@google/model-viewer": "https://cdn.jsdelivr.net/npm/@google/model-viewer@4.0.0/dist/model-viewer.min.js"
+        }
+    }
+    </script>
+
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
         body { display: flex; height: 100vh; background: #1a1a1a; color: white; overflow: hidden; }
@@ -18,7 +27,7 @@
         .model-card .model-name { font-size: 13px; font-weight: 500; }
         .viewer-container { flex: 1; height: 100vh; background: #111; position: relative; }
         model-viewer { width: 100%; height: 100%; background-color: #111; }
-        .placeholder { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #666; font-size: 1.2rem; pointer-events: none; }
+        .placeholder { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #666; font-size: 1.2rem; pointer-events: none; text-align: center; }
         @media (max-width: 700px) {
             body { flex-direction: column; }
             .sidebar { width: 100%; min-width: unset; max-height: 40vh; border-right: none; border-bottom: 2px solid #444; }
@@ -38,9 +47,14 @@
         <model-viewer id="mainViewer" src="" camera-controls touch-action="pan-y" auto-rotate rotation-per-second="10deg" shadow-intensity="0.8" exposure="1"></model-viewer>
         <div class="placeholder" id="placeholderText">👆 Select a model</div>
     </div>
-    <script>
+
+    <!-- 2. MODULE SCRIPT: This loads the viewer and runs your code -->
+    <script type="module">
+        // Import the 3D viewer library
+        import "@google/model-viewer";
+
         // ================================================================
-        //  🔧 LIST YOUR MODELS HERE (use exact filenames, case-sensitive)
+        //  🔧 EDIT THIS LIST: Use EXACT filenames (case-sensitive)
         // ================================================================
         const modelList = [
             { name: "Modern House", file: "01.glb", thumbnail: "01.jpg" },
@@ -63,7 +77,8 @@
             `;
             card.addEventListener('click', () => {
                 viewer.src = model.file;
-                placeholder.style.display = 'none';
+                placeholder.style.display = 'block';
+                placeholder.textContent = `⏳ Loading ${model.name}...`;
                 document.querySelectorAll('.model-card').forEach(c => c.classList.remove('active'));
                 card.classList.add('active');
             });
@@ -71,15 +86,25 @@
             if (index === 0) {
                 setTimeout(() => {
                     viewer.src = model.file;
-                    placeholder.style.display = 'none';
+                    placeholder.style.display = 'block';
+                    placeholder.textContent = `⏳ Loading ${model.name}...`;
                     card.classList.add('active');
                 }, 300);
             }
         });
 
-        viewer.addEventListener('error', () => {
+        // --- Success Handler ---
+        viewer.addEventListener('load', () => {
+            placeholder.style.display = 'none';
+            console.log('✅ Model loaded successfully!');
+        });
+
+        // --- Error Handler ---
+        viewer.addEventListener('error', (event) => {
+            const errorMsg = event.detail?.message || 'Unknown error.';
             placeholder.style.display = 'block';
-            placeholder.textContent = '⚠️ Failed to load: ' + viewer.src;
+            placeholder.textContent = `❌ Failed: ${errorMsg}`;
+            console.error('Model loading error:', event.detail);
         });
     </script>
 </body>
