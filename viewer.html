@@ -22,7 +22,7 @@
             position: absolute; bottom: 30px; right: 30px; z-index: 20;
             background: rgba(20,20,20,0.92); backdrop-filter: blur(8px);
             padding: 18px 22px; border-radius: 16px; border: 1px solid #444;
-            display: flex; flex-direction: column; gap: 12px; min-width: 210px;
+            display: flex; flex-direction: column; gap: 12px; min-width: 220px;
             box-shadow: 0 4px 30px rgba(0,0,0,0.8); max-height: 80vh; overflow-y: auto;
         }
         .controls-panel::-webkit-scrollbar { width: 4px; }
@@ -112,13 +112,16 @@
             <label>✏️ Edge Lines <span id="edgeValue">0.70</span></label>
             <input type="range" id="edgeSlider" min="0" max="1.0" step="0.01" value="0.7">
         </div>
+        <div class="control-group">
+            <label>🎨 Edge Color (Black → Light) <span id="edgeColorValue">#000000</span></label>
+            <input type="range" id="edgeColorSlider" min="0" max="100" step="1" value="0">
+        </div>
         <button class="action-btn" id="resetViewBtn">🎯 Reset View</button>
         <button class="action-btn" id="resetAllBtn">↺ Reset All</button>
     </div>
 
     <div class="status-msg" id="statusMsg">👈 Select a model from the library</div>
 
-    <!-- Debug overlay showing current light direction -->
     <div class="debug-overlay" id="debugInfo">
         ☀️ Light: <span id="debugLight">0.50 0.50 0.70</span><br>
         🌓 Shadow: <span id="debugShadow">3.00</span> | ✏️ Edge: <span id="debugEdge">0.70</span>
@@ -137,7 +140,7 @@
         edge-threshold="0.7"
         edge-color="#000000"
         environment-image="legacy"
-        render-scale="1.5"
+        render-scale="2.0"
         interpolation-decay="200"
         style="width: 100%; height: 100%;">
     </model-viewer>
@@ -160,6 +163,8 @@
         const timeVal = document.getElementById('timeValue');
         const edgeSlider = document.getElementById('edgeSlider');
         const edgeVal = document.getElementById('edgeValue');
+        const edgeColorSlider = document.getElementById('edgeColorSlider');
+        const edgeColorVal = document.getElementById('edgeColorValue');
         const autoRotateCheck = document.getElementById('autoRotateCheck');
 
         const resetViewBtn = document.getElementById('resetViewBtn');
@@ -187,6 +192,16 @@
                 console.warn('Fit failed:', e);
                 viewer.cameraOrbit = `0deg 75deg 200%`;
             }
+        }
+
+        // --- Helper to convert edge color ---
+        function updateEdgeColor(value) {
+            // value: 0-100, 0 = black, 100 = light gray (almost white)
+            const gray = Math.round(255 * (value / 100));
+            const hex = `#${gray.toString(16).padStart(2,'0').repeat(3)}`;
+            viewer.edgeColor = hex;
+            edgeColorVal.textContent = hex;
+            return hex;
         }
 
         if (modelFile) {
@@ -220,17 +235,13 @@
                 softnessVal.textContent = val.toFixed(2);
             });
 
-            // --- Sun path (azimuth + elevation) ---
+            // --- Sun path ---
             function updateSunDirection(time) {
-                // time: 6 to 18 (hours)
-                const t = (time - 6) / 12; // 0 to 1
-                // Azimuth: from east (90°) at 6am to west (270°) at 6pm
+                const t = (time - 6) / 12;
                 const azimuthDeg = 90 + t * 180;
-                // Elevation: 0° at sunrise/sunset, max 60° at noon (with sin curve)
                 const elevationDeg = 60 * Math.sin(Math.PI * t);
                 const azimuthRad = azimuthDeg * Math.PI / 180;
                 const elevationRad = elevationDeg * Math.PI / 180;
-                // Direction vector: x = east-west, y = up, z = north-south
                 const x = Math.cos(azimuthRad) * Math.cos(elevationRad);
                 const y = Math.sin(elevationRad);
                 const z = Math.sin(azimuthRad) * Math.cos(elevationRad);
@@ -247,6 +258,7 @@
                 updateSunDirection(time);
             });
 
+            // --- Edge Lines (threshold) ---
             edgeSlider.addEventListener('input', () => {
                 const val = parseFloat(edgeSlider.value);
                 edgeVal.textContent = val.toFixed(2);
@@ -254,6 +266,12 @@
                 viewer.edgeRender = val > 0.001;
                 debugEdge.textContent = val.toFixed(2);
                 console.log(`✏️ Edge: ${val}`);
+            });
+
+            // --- Edge Color ---
+            edgeColorSlider.addEventListener('input', () => {
+                const val = parseFloat(edgeColorSlider.value);
+                updateEdgeColor(val);
             });
 
             // --- Reset View ---
@@ -288,6 +306,9 @@
                 viewer.edgeRender = true;
                 debugEdge.textContent = '0.70';
 
+                edgeColorSlider.value = '0';
+                updateEdgeColor(0);
+
                 fitModel();
                 console.log('🔄 Reset all');
             });
@@ -297,6 +318,8 @@
             timeVal.textContent = '12:00';
             viewer.autoRotate = false;
             viewer.rotationPerSecond = '0deg';
+            // Set initial edge color to black
+            updateEdgeColor(0);
 
             // --- On load ---
             viewer.addEventListener('load', () => {
