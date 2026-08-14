@@ -79,8 +79,8 @@
             <label for="sunToggle">☀️ Sun On/Off</label>
         </div>
         <div class="control-group">
-            <label>💡 Brightness (Fill) <span id="brightnessValue">1.00</span></label>
-            <input type="range" id="brightnessSlider" min="0" max="100" step="1" value="50">
+            <label>💡 Brightness (Fill) <span id="brightnessValue">0.50</span></label>
+            <input type="range" id="brightnessSlider" min="0" max="100" step="1" value="5">
         </div>
         <div class="control-group">
             <label>☀️ Sun Position (Time) <span id="timeValue">12:00</span></label>
@@ -141,13 +141,17 @@
         controls.dampingFactor = 0.05;
         controls.update();
 
-        // --- Lights: Fill (Brightness) and Sun (Directional) ---
+        // --- Lights ---
 
-        // 1. Fill light (hemisphere) – lights all faces evenly, controlled by Brightness
-        const fillLight = new THREE.HemisphereLight(0xffffff, 0x8888ff, 0.5); // sky color, ground color
+        // 1. Ambient light (constant dim) – ensures nothing is pitch black.
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
+        scene.add(ambientLight);
+
+        // 2. Hemisphere fill (controlled by Brightness) – lights all faces evenly.
+        const fillLight = new THREE.HemisphereLight(0xffffff, 0x8888ff, 0.5);
         scene.add(fillLight);
 
-        // 2. Main directional light (Sun) – casts shadows, grey/transparent shadow
+        // 3. Main directional light (Sun) – casts shadows, grey and transparent.
         const sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
         sunLight.position.set(5, 10, 7);
         sunLight.castShadow = true;
@@ -160,17 +164,14 @@
         sunLight.shadow.camera.top = 10;
         sunLight.shadow.camera.bottom = -10;
         sunLight.shadow.bias = -0.001;
-        // Make shadows softer and grey
-        sunLight.shadow.radius = 4; // softness
-        // Shadow color is determined by the light color and the shadow material.
-        // We'll set the ground shadow material to be more transparent.
+        sunLight.shadow.radius = 4;
         scene.add(sunLight);
 
-        // --- Ground plane (shadow catcher) – more transparent for grey shadows ---
+        // --- Ground plane (shadow catcher) – grey, transparent shadow ---
         const groundGeo = new THREE.PlaneGeometry(20, 20);
         const groundMat = new THREE.ShadowMaterial({
-            opacity: 0.2, // lighter, more transparent
-            color: 0x888888, // grey shadow color
+            opacity: 0.2,
+            color: 0x888888,
         });
         const ground = new THREE.Mesh(groundGeo, groundMat);
         ground.rotation.x = -Math.PI / 2;
@@ -279,12 +280,13 @@
             sunLight.target.updateMatrixWorld();
         }
 
-        // Brightness controls fill light intensity (hemisphere) 0–3
+        // Brightness: 0–100 maps to fillLight intensity 0–10.
         function updateBrightness(value) {
             const val = parseFloat(value);
-            const intensity = (val / 100) * 3.0;
+            const intensity = (val / 100) * 10.0;
             fillLight.intensity = intensity;
             brightnessVal.textContent = intensity.toFixed(2);
+            console.log('💡 Fill intensity:', intensity);
         }
 
         brightnessSlider.addEventListener('input', () => {
@@ -306,7 +308,6 @@
 
         sunToggle.addEventListener('change', () => {
             sunLight.visible = sunToggle.checked;
-            // Fill light is always on.
         });
 
         resetViewBtn.addEventListener('click', () => {
@@ -316,8 +317,8 @@
         });
 
         resetAllBtn.addEventListener('click', () => {
-            brightnessSlider.value = '50';
-            updateBrightness(50);
+            brightnessSlider.value = '5';
+            updateBrightness(5);
 
             timeSlider.value = '12';
             timeVal.textContent = '12:00';
@@ -333,7 +334,7 @@
         });
 
         // --- Init ---
-        updateBrightness(50);
+        updateBrightness(5); // default 0.5 intensity
         updateSunDirection(12);
         timeVal.textContent = '12:00';
 
