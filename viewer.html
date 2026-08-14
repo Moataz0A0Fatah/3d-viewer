@@ -54,11 +54,13 @@
             border: 1px solid #333;
             max-width: 80%;
             line-height: 1.6;
+            pointer-events: auto;
         }
         .status-msg .error { color: #ff6b6b; }
         .status-msg .success { color: #4caf50; }
         .status-msg .small { font-size: 0.8rem; color: #666; }
-        .status-msg a { color: #4caf50; pointer-events: auto; }
+        .status-msg a { color: #4caf50; pointer-events: auto; cursor: pointer; text-decoration: underline; }
+        .status-msg .retry-btn { pointer-events: auto; cursor: pointer; }
         @media (max-width: 600px) {
             .controls-panel { bottom: 15px; right: 15px; padding: 12px 16px; min-width: 170px; max-height: 60vh; gap: 8px; }
             .back-btn { top: 15px; left: 15px; padding: 8px 16px; font-size: 0.85rem; }
@@ -75,6 +77,10 @@
         <div class="checkbox-group">
             <input type="checkbox" id="autoRotateCheck">
             <label for="autoRotateCheck">🔄 Auto-Rotate</label>
+        </div>
+        <div class="checkbox-group">
+            <input type="checkbox" id="sunToggleCheck" checked>
+            <label for="sunToggleCheck">☀️ Sun On/Off</label>
         </div>
         <div class="control-group">
             <label>🔆 Brightness <span id="exposureValue">1.00</span></label>
@@ -141,6 +147,7 @@
         const edgeSlider = document.getElementById('edgeSlider');
         const edgeVal = document.getElementById('edgeValue');
         const autoRotateCheck = document.getElementById('autoRotateCheck');
+        const sunToggleCheck = document.getElementById('sunToggleCheck');
         const resetViewBtn = document.getElementById('resetViewBtn');
         const resetAllBtn = document.getElementById('resetAllBtn');
 
@@ -208,9 +215,9 @@
         composer.addPass(renderPass);
 
         const outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
-        outlinePass.edgeStrength = 5.0;      // fixed high strength for solid black
+        outlinePass.edgeStrength = 5.0;
         outlinePass.edgeGlow = 0.0;
-        outlinePass.edgeThickness = 2.0;     // controlled by slider
+        outlinePass.edgeThickness = 2.0;
         outlinePass.pulsePeriod = 0;
         outlinePass.visibleEdgeColor.set(0x000000);
         outlinePass.hiddenEdgeColor.set(0x000000);
@@ -229,7 +236,6 @@
             box.position.y = 0.75;
             const group = new THREE.Group();
             group.add(box);
-            // Add small sphere on top
             const sphereGeo = new THREE.SphereGeometry(0.3, 16, 16);
             const sphereMat = new THREE.MeshStandardMaterial({ color: 0xff6b6b, roughness: 0.2 });
             const sphere = new THREE.Mesh(sphereGeo, sphereMat);
@@ -237,6 +243,32 @@
             sphere.castShadow = true;
             group.add(sphere);
             return group;
+        }
+
+        // --- Function to force flat shading on a mesh group ---
+        function flattenShading(group) {
+            group.traverse((node) => {
+                if (node.isMesh) {
+                    const geometry = node.geometry;
+                    // Compute flat normals by converting to non-indexed and computing face normals
+                    // Better: use computeVertexNormals with flat shading option in Three.js r160
+                    // We'll just set the material flatShading true and recompute normals
+                    if (node.material) {
+                        node.material.flatShading = true;
+                        node.material.needsUpdate = true;
+                    }
+                    // Recompute normals with flat shading
+                    const pos = geometry.attributes.position;
+                    if (pos) {
+                        // Convert to non-indexed to get face normals
+                        const nonIndexed = geometry.toNonIndexed();
+                        // Compute vertex normals from face normals (flat shading)
+                        nonIndexed.computeVertexNormals();
+                        // Assign back
+                        geometry.copy(nonIndexed);
+                    }
+                }
+            });
         }
 
         // --- Model loading ---
@@ -271,18 +303,24 @@
                         scene.remove(modelGroup);
                     }
                     modelGroup = gltf.scene;
+                    // Enable shadows and flat shading
                     modelGroup.traverse((node) => {
                         if (node.isMesh) {
                             node.castShadow = true;
                             node.receiveShadow = true;
-                            if (node.material) node.material.needsUpdate = true;
+                            if (node.material) {
+                                node.material.flatShading = true;
+                                node.material.needsUpdate = true;
+                            }
                         }
                     });
+                    // Force flat normals
+                    flattenShading(modelGroup);
                     scene.add(modelGroup);
                     fitCameraToGroup(modelGroup);
                     outlinePass.selectedObjects = [modelGroup];
                     modelLoaded = true;
-                    console.log('✅ Model loaded:', url);
+                    console.log('✅ Model loaded and flattened:', url);
                 },
                 undefined,
                 (err) => {
@@ -291,10 +329,13 @@
                         <span class="error">❌ Failed to load: ${fileName}</span><br>
                         <span class="small">Tried: ${url}</span><br>
                         <span style="color:#888;font-size:0.8rem;">Loading fallback box instead...</span>
+                        <br><span class="retry-btn" style="color:#4caf50; cursor:pointer; text-decoration:underline;" onclick="location.reload()">Retry</span>
                     `;
                     // Load fallback
                     if (modelGroup) scene.remove(modelGroup);
                     modelGroup = createFallbackBox();
+                    // Apply flat shading to fallback as well
+                    flattenShading(modelGroup);
                     scene.add(modelGroup);
                     fitCameraToGroup(modelGroup);
                     outlinePass.selectedObjects = [modelGroup];
@@ -307,17 +348,16 @@
             );
         }
 
-        // --- Determine the base URL ---
-        // If the page is served from a subdirectory, we need to use that.
+        // --- Determine base URL ---
         const baseUrl = window.location.href.replace(/\/[^/]*$/, '/');
 
         if (modelFile) {
             const fullUrl = baseUrl + modelFile;
             loadModel(fullUrl);
         } else {
-            // No model specified – show fallback
             statusMsg.innerHTML = '👈 No model selected. Loading fallback box...';
             modelGroup = createFallbackBox();
+            flattenShading(modelGroup);
             scene.add(modelGroup);
             fitCameraToGroup(modelGroup);
             outlinePass.selectedObjects = [modelGroup];
@@ -358,6 +398,10 @@
         shadowSlider.addEventListener('input', () => {
             const val = parseFloat(shadowSlider.value);
             mainLight.intensity = val;
+            // If sun is toggled off, set intensity to 0 but we'll handle in toggle
+            if (!sunToggleCheck.checked) {
+                mainLight.intensity = 0;
+            }
             shadowVal.textContent = val.toFixed(2);
         });
 
@@ -379,12 +423,20 @@
             const val = parseFloat(edgeSlider.value);
             edgeVal.textContent = val.toFixed(1);
             outlinePass.edgeThickness = val;
-            // edgeStrength stays fixed at 5 (strong black)
         });
 
         autoRotateCheck.addEventListener('change', () => {
             controls.autoRotate = autoRotateCheck.checked;
             controls.autoRotateSpeed = 2.0;
+        });
+
+        sunToggleCheck.addEventListener('change', () => {
+            const isOn = sunToggleCheck.checked;
+            if (isOn) {
+                mainLight.intensity = parseFloat(shadowSlider.value);
+            } else {
+                mainLight.intensity = 0;
+            }
         });
 
         resetViewBtn.addEventListener('click', () => {
@@ -404,7 +456,7 @@
 
             shadowSlider.value = '2.0';
             shadowVal.textContent = '2.00';
-            mainLight.intensity = 2.0;
+            mainLight.intensity = sunToggleCheck.checked ? 2.0 : 0;
 
             softnessSlider.value = '0.5';
             softnessVal.textContent = '0.50';
@@ -417,10 +469,12 @@
             edgeSlider.value = '2.0';
             edgeVal.textContent = '2.0';
             outlinePass.edgeThickness = 2.0;
-            outlinePass.edgeStrength = 5.0;
 
             autoRotateCheck.checked = false;
             controls.autoRotate = false;
+
+            sunToggleCheck.checked = true;
+            mainLight.intensity = 2.0;
 
             resetViewBtn.click();
         });
