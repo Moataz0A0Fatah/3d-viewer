@@ -52,9 +52,11 @@
             color: #888; font-size: 1.2rem; pointer-events: none; text-align: center; z-index: 0;
             background: rgba(0,0,0,0.6); padding: 20px 30px; border-radius: 12px;
             border: 1px solid #333;
+            max-width: 80%;
         }
         .status-msg .error { color: #ff6b6b; }
         .status-msg .success { color: #4caf50; }
+        .status-msg .small { font-size: 0.8rem; color: #666; }
         @media (max-width: 600px) {
             .controls-panel { bottom: 15px; right: 15px; padding: 12px 16px; min-width: 170px; max-height: 60vh; gap: 8px; }
             .back-btn { top: 15px; left: 15px; padding: 8px 16px; font-size: 0.85rem; }
@@ -77,8 +79,8 @@
             <input type="range" id="exposureSlider" min="0.2" max="2.5" step="0.01" value="1.0">
         </div>
         <div class="control-group">
-            <label>💡 Ambient Light <span id="ambientValue">0.30</span></label>
-            <input type="range" id="ambientSlider" min="0" max="1.0" step="0.01" value="0.3">
+            <label>💡 Ambient Light <span id="ambientValue">0.50</span></label>
+            <input type="range" id="ambientSlider" min="0" max="3.0" step="0.01" value="0.5">
         </div>
         <div class="control-group">
             <label>🌓 Shadow Intensity <span id="shadowValue">2.00</span></label>
@@ -94,7 +96,7 @@
         </div>
         <div class="control-group">
             <label>✏️ Edge Lines (Width) <span id="edgeValue">2.0</span></label>
-            <input type="range" id="edgeSlider" min="0" max="6" step="0.1" value="2.0">
+            <input type="range" id="edgeSlider" min="0" max="8" step="0.1" value="2.0">
         </div>
         <button class="action-btn" id="resetViewBtn">🎯 Reset View</button>
         <button class="action-btn" id="resetAllBtn">↺ Reset All</button>
@@ -163,7 +165,7 @@
         controls.update();
 
         // --- Lights ---
-        const ambientLight = new THREE.AmbientLight(0x404060, 0.3);
+        const ambientLight = new THREE.AmbientLight(0x404060, 0.5);
         scene.add(ambientLight);
 
         const mainLight = new THREE.DirectionalLight(0xffffff, 2.0);
@@ -181,7 +183,7 @@
         scene.add(mainLight);
 
         // Fill light
-        const fillLight = new THREE.DirectionalLight(0x446688, 0.3);
+        const fillLight = new THREE.DirectionalLight(0x446688, 0.2);
         fillLight.position.set(-5, -2, 5);
         scene.add(fillLight);
 
@@ -204,7 +206,7 @@
         composer.addPass(renderPass);
 
         const outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
-        outlinePass.edgeStrength = 2.0;
+        outlinePass.edgeStrength = 3.0;
         outlinePass.edgeGlow = 0.0;
         outlinePass.edgeThickness = 2.0;
         outlinePass.pulsePeriod = 0;
@@ -215,7 +217,7 @@
         const outputPass = new OutputPass();
         composer.addPass(outputPass);
 
-        // --- Fallback box (so controls work even without model) ---
+        // --- Fallback box ---
         function createFallbackBox() {
             const geo = new THREE.BoxGeometry(1.5, 1.5, 1.5);
             const mat = new THREE.MeshStandardMaterial({ color: 0x4caf50, roughness: 0.3, metalness: 0.1 });
@@ -225,7 +227,7 @@
             box.position.y = 0.75;
             const group = new THREE.Group();
             group.add(box);
-            // Add small sphere on top for interest
+            // Add small sphere on top
             const sphereGeo = new THREE.SphereGeometry(0.3, 16, 16);
             const sphereMat = new THREE.MeshStandardMaterial({ color: 0xff6b6b, roughness: 0.2 });
             const sphere = new THREE.Mesh(sphereGeo, sphereMat);
@@ -255,14 +257,14 @@
         }
 
         function loadModel(url) {
-            statusMsg.innerHTML = '⏳ Loading <span style="color:#888;">' + url.split('/').pop() + '</span>...';
+            const fileName = url.split('/').pop();
+            statusMsg.innerHTML = `⏳ Loading <span style="color:#888;">${fileName}</span>...<br><span class="small">from ${url}</span>`;
             const loader = new GLTFLoader();
             loader.load(
                 url,
                 (gltf) => {
                     statusMsg.style.display = 'none';
-                    const name = url.split('/').pop().replace('.glb','');
-                    titleEl.textContent = `📐 ${name}`;
+                    titleEl.textContent = `📐 ${fileName.replace('.glb','')}`;
                     if (modelGroup) {
                         scene.remove(modelGroup);
                     }
@@ -284,7 +286,8 @@
                 (err) => {
                     console.error('❌ Model load failed:', err);
                     statusMsg.innerHTML = `
-                        ❌ Failed to load: <span style="color:#ff6b6b;">${url}</span><br>
+                        ❌ Failed to load: <span style="color:#ff6b6b;">${fileName}</span><br>
+                        <span class="small">Checked: ${url}</span><br>
                         <span style="color:#888;font-size:0.8rem;">Loading fallback box instead...</span>
                     `;
                     // Load fallback
@@ -295,16 +298,18 @@
                     outlinePass.selectedObjects = [modelGroup];
                     modelLoaded = true;
                     titleEl.textContent = '📐 Fallback (Model not found)';
-                    // After 2s, hide status
                     setTimeout(() => {
                         statusMsg.style.display = 'none';
-                    }, 2000);
+                    }, 3000);
                 }
             );
         }
 
         if (modelFile) {
-            loadModel(modelFile);
+            // Construct full URL relative to the current page
+            const baseUrl = window.location.href.replace(/\/[^/]*$/, '/');
+            const fullUrl = baseUrl + modelFile;
+            loadModel(fullUrl);
         } else {
             // No model specified – show fallback
             statusMsg.innerHTML = '👈 No model selected. Loading fallback box...';
@@ -370,7 +375,7 @@
             const val = parseFloat(edgeSlider.value);
             edgeVal.textContent = val.toFixed(1);
             outlinePass.edgeThickness = val;
-            outlinePass.edgeStrength = Math.min(5, val * 1.5);
+            outlinePass.edgeStrength = Math.min(8, val * 1.5 + 1);
         });
 
         autoRotateCheck.addEventListener('change', () => {
@@ -389,9 +394,9 @@
             exposureVal.textContent = '1.00';
             renderer.toneMappingExposure = 1.0;
 
-            ambientSlider.value = '0.3';
-            ambientVal.textContent = '0.30';
-            ambientLight.intensity = 0.3;
+            ambientSlider.value = '0.5';
+            ambientVal.textContent = '0.50';
+            ambientLight.intensity = 0.5;
 
             shadowSlider.value = '2.0';
             shadowVal.textContent = '2.00';
@@ -408,7 +413,7 @@
             edgeSlider.value = '2.0';
             edgeVal.textContent = '2.0';
             outlinePass.edgeThickness = 2.0;
-            outlinePass.edgeStrength = 3.0;
+            outlinePass.edgeStrength = 4.0;
 
             autoRotateCheck.checked = false;
             controls.autoRotate = false;
