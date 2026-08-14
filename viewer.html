@@ -73,6 +73,10 @@
             <input type="range" id="exposureSlider" min="0.2" max="2.5" step="0.01" value="1.0">
         </div>
         <div class="control-group">
+            <label>💡 Ambient Light <span id="ambientValue">0.30</span></label>
+            <input type="range" id="ambientSlider" min="0" max="1.0" step="0.01" value="0.3">
+        </div>
+        <div class="control-group">
             <label>🌓 Shadow Intensity <span id="shadowValue">2.00</span></label>
             <input type="range" id="shadowSlider" min="0" max="3.0" step="0.01" value="2.0">
         </div>
@@ -92,7 +96,6 @@
         <button class="action-btn" id="resetAllBtn">↺ Reset All</button>
     </div>
 
-    <!-- Three.js will render here -->
     <div id="canvasContainer"></div>
 
     <script type="importmap">
@@ -117,9 +120,10 @@
         const statusMsg = document.getElementById('statusMsg');
         const titleEl = document.getElementById('modelTitle');
 
-        // Sliders
         const exposureSlider = document.getElementById('exposureSlider');
         const exposureVal = document.getElementById('exposureValue');
+        const ambientSlider = document.getElementById('ambientSlider');
+        const ambientVal = document.getElementById('ambientValue');
         const shadowSlider = document.getElementById('shadowSlider');
         const shadowVal = document.getElementById('shadowValue');
         const softnessSlider = document.getElementById('softnessSlider');
@@ -155,7 +159,7 @@
         controls.update();
 
         // --- Lights ---
-        const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+        const ambientLight = new THREE.AmbientLight(0x404060, 0.3);
         scene.add(ambientLight);
 
         const mainLight = new THREE.DirectionalLight(0xffffff, 2.0);
@@ -172,24 +176,20 @@
         mainLight.shadow.bias = -0.001;
         scene.add(mainLight);
 
-        // A small fill light from below
+        // Fill light (optional)
         const fillLight = new THREE.DirectionalLight(0x446688, 0.3);
-        fillLight.position.set(-5, -5, 5);
+        fillLight.position.set(-5, -2, 5);
         scene.add(fillLight);
 
-        // Ground plane (receives shadows)
+        // --- Ground plane (will be repositioned after model loads) ---
         const groundGeo = new THREE.PlaneGeometry(20, 20);
-        const groundMat = new THREE.ShadowMaterial({
-            opacity: 0.4,
-            color: 0x222222,
-        });
+        const groundMat = new THREE.ShadowMaterial({ opacity: 0.4, color: 0x222222 });
         const ground = new THREE.Mesh(groundGeo, groundMat);
         ground.rotation.x = -Math.PI / 2;
         ground.position.y = -0.01;
         ground.receiveShadow = true;
         scene.add(ground);
 
-        // Helper grid (optional)
         const gridHelper = new THREE.GridHelper(20, 20, 0x666666, 0x333333);
         gridHelper.position.y = -0.01;
         scene.add(gridHelper);
@@ -200,9 +200,9 @@
         composer.addPass(renderPass);
 
         const outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
-        outlinePass.edgeStrength = 2.0; // will be controlled by slider
+        outlinePass.edgeStrength = 2.0;
         outlinePass.edgeGlow = 0.0;
-        outlinePass.edgeThickness = 2.0; // this controls line width (in pixels)
+        outlinePass.edgeThickness = 2.0;
         outlinePass.pulsePeriod = 0;
         outlinePass.visibleEdgeColor.set(0x000000);
         outlinePass.hiddenEdgeColor.set(0x000000);
@@ -211,12 +211,24 @@
         const outputPass = new OutputPass();
         composer.addPass(outputPass);
 
-        // --- Load model from URL ---
+        // --- Model loading ---
         const urlParams = new URLSearchParams(window.location.search);
         const modelFile = urlParams.get('model');
 
         let modelGroup = null;
         let modelLoaded = false;
+
+        function fitCameraToModel(box) {
+            const size = box.max.sub(box.min);
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const distance = maxDim * 1.8;
+            camera.position.set(0, distance * 0.6, distance);
+            controls.target.copy(box.center);
+            controls.update();
+            // Reposition ground plane to the bottom of the model
+            ground.position.y = box.min.y - 0.01;
+            gridHelper.position.y = box.min.y - 0.01;
+        }
 
         function loadModel(url) {
             statusMsg.textContent = '⏳ Loading...';
@@ -228,29 +240,21 @@
                     titleEl.textContent = `📐 ${url.split('/').pop().replace('.glb','')}`;
                     if (modelGroup) {
                         scene.remove(modelGroup);
-                        // Also remove from outline pass? We'll replace the selection.
                     }
                     modelGroup = gltf.scene;
-                    // Traverse and enable shadows
+                    // Enable shadows on all meshes
                     modelGroup.traverse((node) => {
                         if (node.isMesh) {
                             node.castShadow = true;
                             node.receiveShadow = true;
-                            // Ensure material is standard
-                            if (node.material) {
-                                node.material.needsUpdate = true;
-                            }
+                            if (node.material) node.material.needsUpdate = true;
                         }
                     });
                     scene.add(modelGroup);
-                    // Fit camera to model
+
+                    // Compute bounding box
                     const box = new THREE.Box3().setFromObject(modelGroup);
-                    const size = box.max.sub(box.min);
-                    const maxDim = Math.max(size.x, size.y, size.z);
-                    const dist = maxDim * 1.8;
-                    camera.position.set(0, dist * 0.5, dist);
-                    controls.target.set(0, 0, 0);
-                    controls.update();
+                    fitCameraToModel(box);
 
                     // Set outline pass to use the model
                     outlinePass.selectedObjects = [modelGroup];
@@ -275,7 +279,6 @@
 
         // --- Controls ---
         function updateSunDirection(time) {
-            // time 6-18
             const t = (time - 6) / 12;
             const azimuthDeg = 90 + t * 180;
             const elevationDeg = 60 * Math.sin(Math.PI * t);
@@ -289,11 +292,16 @@
             mainLight.target.updateMatrixWorld();
         }
 
-        // Apply controls
         exposureSlider.addEventListener('input', () => {
             const val = parseFloat(exposureSlider.value);
             renderer.toneMappingExposure = val;
             exposureVal.textContent = val.toFixed(2);
+        });
+
+        ambientSlider.addEventListener('input', () => {
+            const val = parseFloat(ambientSlider.value);
+            ambientLight.intensity = val;
+            ambientVal.textContent = val.toFixed(2);
         });
 
         shadowSlider.addEventListener('input', () => {
@@ -304,7 +312,7 @@
 
         softnessSlider.addEventListener('input', () => {
             const val = parseFloat(softnessSlider.value);
-            mainLight.shadow.radius = val * 2; // map 0.1-2 -> 0.2-4
+            mainLight.shadow.radius = val * 2;
             softnessVal.textContent = val.toFixed(2);
         });
 
@@ -320,7 +328,6 @@
             const val = parseFloat(edgeSlider.value);
             edgeVal.textContent = val.toFixed(1);
             outlinePass.edgeThickness = val;
-            // also adjust strength slightly
             outlinePass.edgeStrength = Math.min(5, val * 1.5);
         });
 
@@ -332,12 +339,7 @@
         resetViewBtn.addEventListener('click', () => {
             if (modelGroup) {
                 const box = new THREE.Box3().setFromObject(modelGroup);
-                const size = box.max.sub(box.min);
-                const maxDim = Math.max(size.x, size.y, size.z);
-                const dist = maxDim * 1.8;
-                camera.position.set(0, dist * 0.5, dist);
-                controls.target.set(0, 0, 0);
-                controls.update();
+                fitCameraToModel(box);
             }
         });
 
@@ -345,6 +347,10 @@
             exposureSlider.value = '1.0';
             exposureVal.textContent = '1.00';
             renderer.toneMappingExposure = 1.0;
+
+            ambientSlider.value = '0.3';
+            ambientVal.textContent = '0.30';
+            ambientLight.intensity = 0.3;
 
             shadowSlider.value = '2.0';
             shadowVal.textContent = '2.00';
@@ -387,13 +393,12 @@
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
-            // Update outline pass if needed
             composer.render();
         }
         animate();
 
-        // --- For debugging: expose variables ---
-        window.THREE_VIEWER = { scene, camera, renderer, controls, mainLight, outlinePass };
+        // For debugging
+        window.THREE_VIEWER = { scene, camera, renderer, controls, mainLight, outlinePass, ambientLight };
     </script>
 </body>
 </html>
