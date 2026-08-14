@@ -83,7 +83,7 @@
             <input type="range" id="exposureSlider" min="0.2" max="2.5" step="0.01" value="1.0">
         </div>
         <div class="control-group">
-            <label>💡 Ambient Light <span id="ambientValue">1.00</span></label>
+            <label>💡 Dome Ambient <span id="ambientValue">1.00</span></label>
             <input type="range" id="ambientSlider" min="0" max="10" step="0.1" value="1.0">
         </div>
         <div class="control-group">
@@ -153,13 +153,13 @@
         controls.dampingFactor = 0.05;
         controls.update();
 
-        // --- Lights ---
-        // Ambient light (affects all surfaces)
+        // --- Lights: Dome Ambient (Ambient + Hemisphere) ---
+        // Strong ambient light for even fill
         const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
         scene.add(ambientLight);
 
-        // Hemisphere light for fill from above/below (helps with ambient)
-        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x404060, 0.6);
+        // Hemisphere light: sky color from above, ground color from below
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x404060, 0.8);
         scene.add(hemiLight);
 
         // Main directional light (sun)
@@ -177,7 +177,7 @@
         mainLight.shadow.bias = -0.001;
         scene.add(mainLight);
 
-        // --- Ground plane (very subtle, just for shadows, aligned with model) ---
+        // --- Ground plane (very subtle shadow catcher) ---
         const groundGeo = new THREE.PlaneGeometry(20, 20);
         const groundMat = new THREE.ShadowMaterial({
             opacity: 0.15,
@@ -226,13 +226,12 @@
                         scene.remove(modelGroup);
                     }
                     modelGroup = gltf.scene;
-                    // Enable shadows and ensure materials are standard
+                    // Convert all materials to MeshStandardMaterial to respond to lights
                     modelGroup.traverse((node) => {
                         if (node.isMesh) {
                             node.castShadow = true;
                             node.receiveShadow = true;
                             if (node.material) {
-                                // Convert any material to MeshStandardMaterial to ensure lighting response
                                 const oldMat = node.material;
                                 const newMat = new THREE.MeshStandardMaterial({
                                     color: oldMat.color ? oldMat.color : 0xffffff,
@@ -241,6 +240,7 @@
                                     metalness: oldMat.metalness !== undefined ? oldMat.metalness : 0.0,
                                     envMap: null, // remove environment map to use scene lights
                                     emissive: new THREE.Color(0x000000),
+                                    emissiveIntensity: 0,
                                 });
                                 node.material = newMat;
                                 node.material.needsUpdate = true;
@@ -297,9 +297,11 @@
             exposureVal.textContent = val.toFixed(2);
         });
 
+        // Ambient slider controls BOTH ambient and hemisphere lights for a dome effect
         ambientSlider.addEventListener('input', () => {
             const val = parseFloat(ambientSlider.value);
             ambientLight.intensity = val;
+            hemiLight.intensity = val * 0.8; // slightly lower for natural feel
             ambientVal.textContent = val.toFixed(2);
         });
 
@@ -340,6 +342,7 @@
             ambientSlider.value = '1.0';
             ambientVal.textContent = '1.00';
             ambientLight.intensity = 1.0;
+            hemiLight.intensity = 0.8;
 
             shadowSlider.value = '1.0';
             shadowVal.textContent = '1.00';
@@ -378,7 +381,7 @@
         }
         animate();
 
-        window.THREE_VIEWER = { scene, camera, renderer, controls, mainLight, ambientLight, ground };
+        window.THREE_VIEWER = { scene, camera, renderer, controls, mainLight, ambientLight, hemiLight, ground };
     </script>
 </body>
 </html>
