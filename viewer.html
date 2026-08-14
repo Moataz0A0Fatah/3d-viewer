@@ -79,7 +79,7 @@
             <label for="sunToggle">☀️ Sun On/Off</label>
         </div>
         <div class="control-group">
-            <label>🔆 Brightness <span id="brightnessValue">1.00</span></label>
+            <label>💡 Brightness (Fill) <span id="brightnessValue">1.00</span></label>
             <input type="range" id="brightnessSlider" min="0" max="100" step="1" value="50">
         </div>
         <div class="control-group">
@@ -131,7 +131,6 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        // Fixed exposure – brightness controls lights directly
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.toneMappingExposure = 1.0;
         container.appendChild(renderer.domElement);
@@ -142,32 +141,36 @@
         controls.dampingFactor = 0.05;
         controls.update();
 
-        // --- Lights ---
-        // Fill light (always on, dim, scales with brightness)
-        const fillLight = new THREE.DirectionalLight(0x8888ff, 0.3);
-        fillLight.position.set(-5, 3, 5);
+        // --- Lights: Fill (Brightness) and Sun (Directional) ---
+
+        // 1. Fill light (hemisphere) – lights all faces evenly, controlled by Brightness
+        const fillLight = new THREE.HemisphereLight(0xffffff, 0x8888ff, 0.5); // sky color, ground color
         scene.add(fillLight);
 
-        // Main directional light (sun)
-        const mainLight = new THREE.DirectionalLight(0xffffff, 1.0);
-        mainLight.position.set(5, 10, 7);
-        mainLight.castShadow = true;
-        mainLight.shadow.mapSize.width = 2048;
-        mainLight.shadow.mapSize.height = 2048;
-        mainLight.shadow.camera.near = 0.1;
-        mainLight.shadow.camera.far = 50;
-        mainLight.shadow.camera.left = -10;
-        mainLight.shadow.camera.right = 10;
-        mainLight.shadow.camera.top = 10;
-        mainLight.shadow.camera.bottom = -10;
-        mainLight.shadow.bias = -0.001;
-        scene.add(mainLight);
+        // 2. Main directional light (Sun) – casts shadows, grey/transparent shadow
+        const sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        sunLight.position.set(5, 10, 7);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.camera.near = 0.1;
+        sunLight.shadow.camera.far = 50;
+        sunLight.shadow.camera.left = -10;
+        sunLight.shadow.camera.right = 10;
+        sunLight.shadow.camera.top = 10;
+        sunLight.shadow.camera.bottom = -10;
+        sunLight.shadow.bias = -0.001;
+        // Make shadows softer and grey
+        sunLight.shadow.radius = 4; // softness
+        // Shadow color is determined by the light color and the shadow material.
+        // We'll set the ground shadow material to be more transparent.
+        scene.add(sunLight);
 
-        // --- Ground plane (shadow catcher) ---
+        // --- Ground plane (shadow catcher) – more transparent for grey shadows ---
         const groundGeo = new THREE.PlaneGeometry(20, 20);
         const groundMat = new THREE.ShadowMaterial({
-            opacity: 0.15,
-            color: 0x000000,
+            opacity: 0.2, // lighter, more transparent
+            color: 0x888888, // grey shadow color
         });
         const ground = new THREE.Mesh(groundGeo, groundMat);
         ground.rotation.x = -Math.PI / 2;
@@ -271,20 +274,17 @@
             const x = Math.cos(azimuthRad) * Math.cos(elevationRad);
             const y = Math.sin(elevationRad);
             const z = Math.sin(azimuthRad) * Math.cos(elevationRad);
-            mainLight.position.set(x * 10, y * 10, z * 10);
-            mainLight.target.position.set(0, 0, 0);
-            mainLight.target.updateMatrixWorld();
+            sunLight.position.set(x * 10, y * 10, z * 10);
+            sunLight.target.position.set(0, 0, 0);
+            sunLight.target.updateMatrixWorld();
         }
 
-        // Brightness: controls main light intensity AND fill light intensity
-        // 0–100 maps to intensity 0–3 for main, 0–0.9 for fill
+        // Brightness controls fill light intensity (hemisphere) 0–3
         function updateBrightness(value) {
             const val = parseFloat(value);
-            const mainIntensity = (val / 100) * 3.0;
-            const fillIntensity = (val / 100) * 0.9;
-            mainLight.intensity = mainIntensity;
-            fillLight.intensity = fillIntensity;
-            brightnessVal.textContent = mainIntensity.toFixed(2);
+            const intensity = (val / 100) * 3.0;
+            fillLight.intensity = intensity;
+            brightnessVal.textContent = intensity.toFixed(2);
         }
 
         brightnessSlider.addEventListener('input', () => {
@@ -305,8 +305,8 @@
         });
 
         sunToggle.addEventListener('change', () => {
-            mainLight.visible = sunToggle.checked;
-            // when sun is off, fill light still works (it's always visible)
+            sunLight.visible = sunToggle.checked;
+            // Fill light is always on.
         });
 
         resetViewBtn.addEventListener('click', () => {
@@ -327,7 +327,7 @@
             controls.autoRotate = false;
 
             sunToggle.checked = true;
-            mainLight.visible = true;
+            sunLight.visible = true;
 
             resetViewBtn.click();
         });
@@ -354,7 +354,7 @@
         }
         animate();
 
-        window.THREE_VIEWER = { scene, camera, renderer, controls, mainLight, fillLight, ground };
+        window.THREE_VIEWER = { scene, camera, renderer, controls, sunLight, fillLight, ground };
     </script>
 </body>
 </html>
