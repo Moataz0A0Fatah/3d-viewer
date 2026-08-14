@@ -102,7 +102,6 @@
     <div class="measure-label" id="measureLabel">📏 0.000 m</div>
 
     <div class="controls-panel">
-        <!-- Standard controls -->
         <div class="checkbox-group">
             <input type="checkbox" id="autoRotateCheck">
             <label for="autoRotateCheck">🔄 Auto-Rotate</label>
@@ -137,10 +136,8 @@
             <input type="range" id="fillElevationSlider" min="0" max="90" step="1" value="45">
         </div>
 
-        <!-- Measure -->
         <button class="action-btn" id="measureBtn">📏 Measure (snap to vertex)</button>
 
-        <!-- Section slices with percentage -->
         <div class="section-controls">
             <div style="color:#aaa; font-size:0.75rem; margin-bottom:4px;">✂️ Section Slices (%)</div>
             <div class="row">
@@ -298,7 +295,7 @@
             group.traverse((node) => {
                 if (node.isMesh) {
                     const geo = node.geometry;
-                    if (geo.attributes.position) {
+                    if (geo && geo.attributes && geo.attributes.position) {
                         const pos = geo.attributes.position;
                         for (let i = 0; i < pos.count; i++) {
                             const p = new THREE.Vector3();
@@ -312,6 +309,26 @@
             allVertices = positions;
         }
 
+        // --- Create fallback model (box) ---
+        function createFallbackModel() {
+            const group = new THREE.Group();
+            const geo = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x4caf50, roughness: 0.3, metalness: 0.1 });
+            const box = new THREE.Mesh(geo, mat);
+            box.castShadow = true;
+            box.receiveShadow = true;
+            box.position.y = 0.75;
+            group.add(box);
+            // Add a small sphere on top
+            const sphereGeo = new THREE.SphereGeometry(0.3, 16, 16);
+            const sphereMat = new THREE.MeshStandardMaterial({ color: 0xff6b6b, roughness: 0.2 });
+            const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+            sphere.position.set(0, 1.5, 0);
+            sphere.castShadow = true;
+            group.add(sphere);
+            return group;
+        }
+
         // --- Helper functions ---
         function repositionGround(box) {
             const centerX = (box.min.x + box.max.x) / 2;
@@ -321,28 +338,39 @@
         }
 
         function fitCameraToGroup(group) {
-            const box = new THREE.Box3().setFromObject(group);
-            modelBox.copy(box);
-            const size = box.max.sub(box.min);
-            const maxDim = Math.max(size.x, size.y, size.z);
-            const distance = maxDim * 1.8;
-            camera.position.set(0, distance * 0.6, distance);
-            controls.target.copy(box.center);
-            controls.update();
-            repositionGround(box);
-            // Update clipping slider ranges (percentage)
-            // They are now 0-100, no need to change range.
-            // Reset clipping positions to 50%
-            clipXSlider.value = 50;
-            clipYSlider.value = 50;
-            clipZSlider.value = 50;
-            clipXVal.textContent = '50%';
-            clipYVal.textContent = '50%';
-            clipZVal.textContent = '50%';
-            // Update bounding box
-            updateBoundingBox();
-            // Build vertex cache for measure snap
-            if (modelGroup) buildVertexCache(modelGroup);
+            try {
+                const box = new THREE.Box3().setFromObject(group);
+                if (!box || box.isEmpty()) {
+                    throw new Error('Empty bounding box');
+                }
+                modelBox.copy(box);
+                const size = box.max.sub(box.min);
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const distance = maxDim * 1.8;
+                camera.position.set(0, distance * 0.6, distance);
+                controls.target.copy(box.center);
+                controls.update();
+                repositionGround(box);
+                // Update clipping slider ranges (percentage)
+                // They are now 0-100, no need to change range.
+                // Reset clipping positions to 50%
+                clipXSlider.value = 50;
+                clipYSlider.value = 50;
+                clipZSlider.value = 50;
+                clipXVal.textContent = '50%';
+                clipYVal.textContent = '50%';
+                clipZVal.textContent = '50%';
+                // Update bounding box
+                updateBoundingBox();
+                // Build vertex cache for measure snap
+                if (modelGroup) buildVertexCache(modelGroup);
+            } catch(e) {
+                console.warn('Fit failed:', e);
+                // fallback camera
+                camera.position.set(3, 3, 5);
+                controls.target.set(0, 0, 0);
+                controls.update();
+            }
         }
 
         function updateBoundingBox() {
@@ -431,7 +459,6 @@
             const intersects = raycaster.intersectObjects(meshes);
             if (intersects.length > 0) {
                 const pt = intersects[0].point;
-                // Snap to nearest vertex
                 const snapped = getNearestVertex(pt);
                 return snapped || pt;
             }
@@ -511,9 +538,7 @@
                     scene.add(modelGroup);
                     fitCameraToGroup(modelGroup);
                     updateClipping();
-                    // Build vertex cache
                     buildVertexCache(modelGroup);
-                    // Show bounding box
                     updateBoundingBox();
                     console.log('✅ Model loaded:', url);
                 },
@@ -523,9 +548,20 @@
                     statusMsg.innerHTML = `
                         <span class="error">❌ Failed to load: ${fileName}</span><br>
                         <span class="small">Tried: ${url}</span><br>
-                        <span style="color:#888;font-size:0.8rem;">Check that the file exists and is accessible.</span>
+                        <span style="color:#888;font-size:0.8rem;">Loading fallback box instead.</span>
                     `;
-                    titleEl.textContent = '⚠️ Error';
+                    // Load fallback
+                    if (modelGroup) scene.remove(modelGroup);
+                    modelGroup = createFallbackModel();
+                    scene.add(modelGroup);
+                    fitCameraToGroup(modelGroup);
+                    updateClipping();
+                    buildVertexCache(modelGroup);
+                    updateBoundingBox();
+                    titleEl.textContent = '📐 Fallback (Box)';
+                    setTimeout(() => {
+                        statusMsg.style.display = 'none';
+                    }, 2000);
                 }
             );
         }
@@ -538,8 +574,17 @@
             const fullUrl = baseUrl + modelFile;
             loadModel(fullUrl);
         } else {
-            statusMsg.innerHTML = '👈 No model specified. Please add ?model=yourfile.glb to the URL.';
-            titleEl.textContent = 'No Model';
+            statusMsg.innerHTML = '👈 No model specified. Loading fallback box.';
+            modelGroup = createFallbackModel();
+            scene.add(modelGroup);
+            fitCameraToGroup(modelGroup);
+            updateClipping();
+            buildVertexCache(modelGroup);
+            updateBoundingBox();
+            titleEl.textContent = '📐 Fallback (No model)';
+            setTimeout(() => {
+                statusMsg.style.display = 'none';
+            }, 1500);
         }
 
         // --- Controls ---
