@@ -92,8 +92,8 @@
             <input type="range" id="shadowSlider" min="0" max="3.0" step="0.01" value="2.0">
         </div>
         <div class="control-group">
-            <label>🌫️ Shadow Softness <span id="softnessValue">0.50</span></label>
-            <input type="range" id="softnessSlider" min="0.1" max="2.0" step="0.01" value="0.5">
+            <label>🌑 Shadow Transparency <span id="shadowOpacityValue">0.50</span></label>
+            <input type="range" id="shadowOpacitySlider" min="0" max="1.0" step="0.01" value="0.5">
         </div>
         <div class="control-group">
             <label>☀️ Sun Position (Time) <span id="timeValue">12:00</span></label>
@@ -137,8 +137,8 @@
         const ambientVal = document.getElementById('ambientValue');
         const shadowSlider = document.getElementById('shadowSlider');
         const shadowVal = document.getElementById('shadowValue');
-        const softnessSlider = document.getElementById('softnessSlider');
-        const softnessVal = document.getElementById('softnessValue');
+        const shadowOpacitySlider = document.getElementById('shadowOpacitySlider');
+        const shadowOpacityVal = document.getElementById('shadowOpacityValue');
         const timeSlider = document.getElementById('timeSlider');
         const timeVal = document.getElementById('timeValue');
         const edgeSlider = document.getElementById('edgeSlider');
@@ -193,17 +193,22 @@
         fillLight.position.set(-5, -2, 5);
         scene.add(fillLight);
 
-        // --- Ground plane ---
+        // --- Ground plane (shadow receiver) ---
+        // We'll update its position and opacity later.
         const groundGeo = new THREE.PlaneGeometry(20, 20);
-        const groundMat = new THREE.ShadowMaterial({ opacity: 0.4, color: 0x222222 });
+        const groundMat = new THREE.ShadowMaterial({
+            opacity: 0.5,
+            color: 0x222222,
+        });
         const ground = new THREE.Mesh(groundGeo, groundMat);
         ground.rotation.x = -Math.PI / 2;
-        ground.position.y = -0.01;
+        ground.position.set(0, -0.01, 0);
         ground.receiveShadow = true;
         scene.add(ground);
 
+        // Grid helper – will be repositioned
         const gridHelper = new THREE.GridHelper(20, 20, 0x666666, 0x333333);
-        gridHelper.position.y = -0.01;
+        gridHelper.position.set(0, -0.01, 0);
         scene.add(gridHelper);
 
         // --- Post-processing (Outline) ---
@@ -212,7 +217,7 @@
         composer.addPass(renderPass);
 
         const outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
-        outlinePass.edgeStrength = 5.0;      // fixed high strength for solid black
+        outlinePass.edgeStrength = 5.0;
         outlinePass.edgeGlow = 0.0;
         outlinePass.edgeThickness = 2.0;
         outlinePass.pulsePeriod = 0;
@@ -229,6 +234,15 @@
 
         let modelGroup = null;
 
+        function repositionGroundAndGrid(box) {
+            // Center of model horizontally, bottom of model vertically
+            const centerX = (box.min.x + box.max.x) / 2;
+            const centerZ = (box.min.z + box.max.z) / 2;
+            const bottomY = box.min.y - 0.01;
+            ground.position.set(centerX, bottomY, centerZ);
+            gridHelper.position.set(centerX, bottomY, centerZ);
+        }
+
         function fitCameraToGroup(group) {
             const box = new THREE.Box3().setFromObject(group);
             const size = box.max.sub(box.min);
@@ -237,8 +251,7 @@
             camera.position.set(0, distance * 0.6, distance);
             controls.target.copy(box.center);
             controls.update();
-            ground.position.y = box.min.y - 0.01;
-            gridHelper.position.y = box.min.y - 0.01;
+            repositionGroundAndGrid(box);
         }
 
         function loadModel(url) {
@@ -249,7 +262,7 @@
                 url,
                 (gltf) => {
                     statusMsg.style.display = 'none';
-                    titleEl.textContent = `📐 ${fileName.replace('.glb','')}`;
+                    titleEl.textContent = `📐 ${fileName.replace(/\.glb$/i,'')}`;
                     if (modelGroup) {
                         scene.remove(modelGroup);
                     }
@@ -279,12 +292,13 @@
             );
         }
 
-        // --- Determine base URL and ensure model file has .glb extension ---
+        // --- Determine base URL ---
         if (modelFile) {
-            // If modelFile doesn't end with .glb, add it
+            // If no extension, add .glb
             if (!modelFile.toLowerCase().endsWith('.glb')) {
                 modelFile += '.glb';
             }
+            // Build full URL
             const baseUrl = window.location.href.replace(/\/[^/]*$/, '/');
             const fullUrl = baseUrl + modelFile;
             loadModel(fullUrl);
@@ -326,10 +340,10 @@
             shadowVal.textContent = val.toFixed(2);
         });
 
-        softnessSlider.addEventListener('input', () => {
-            const val = parseFloat(softnessSlider.value);
-            mainLight.shadow.radius = val * 2;
-            softnessVal.textContent = val.toFixed(2);
+        shadowOpacitySlider.addEventListener('input', () => {
+            const val = parseFloat(shadowOpacitySlider.value);
+            ground.material.opacity = val;
+            shadowOpacityVal.textContent = val.toFixed(2);
         });
 
         timeSlider.addEventListener('input', () => {
@@ -351,10 +365,8 @@
             controls.autoRotateSpeed = 2.0;
         });
 
-        // Sun toggle
         sunToggle.addEventListener('change', () => {
             mainLight.visible = sunToggle.checked;
-            // Also toggle shadow casting? We'll just hide the light.
         });
 
         resetViewBtn.addEventListener('click', () => {
@@ -376,9 +388,9 @@
             shadowVal.textContent = '2.00';
             mainLight.intensity = 2.0;
 
-            softnessSlider.value = '0.5';
-            softnessVal.textContent = '0.50';
-            mainLight.shadow.radius = 1.0;
+            shadowOpacitySlider.value = '0.5';
+            shadowOpacityVal.textContent = '0.50';
+            ground.material.opacity = 0.5;
 
             timeSlider.value = '12';
             timeVal.textContent = '12:00';
@@ -420,7 +432,7 @@
         }
         animate();
 
-        window.THREE_VIEWER = { scene, camera, renderer, controls, mainLight, outlinePass, ambientLight };
+        window.THREE_VIEWER = { scene, camera, renderer, controls, mainLight, outlinePass, ambientLight, ground };
     </script>
 </body>
 </html>
