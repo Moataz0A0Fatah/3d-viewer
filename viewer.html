@@ -49,14 +49,16 @@
         }
         .status-msg {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: #888; font-size: 1.2rem; pointer-events: none; text-align: center; z-index: 0;
+            color: #888; font-size: 1.1rem; pointer-events: none; text-align: center; z-index: 0;
             background: rgba(0,0,0,0.6); padding: 20px 30px; border-radius: 12px;
             border: 1px solid #333;
             max-width: 80%;
+            line-height: 1.6;
         }
         .status-msg .error { color: #ff6b6b; }
         .status-msg .success { color: #4caf50; }
         .status-msg .small { font-size: 0.8rem; color: #666; }
+        .status-msg a { color: #4caf50; pointer-events: auto; }
         @media (max-width: 600px) {
             .controls-panel { bottom: 15px; right: 15px; padding: 12px 16px; min-width: 170px; max-height: 60vh; gap: 8px; }
             .back-btn { top: 15px; left: 15px; padding: 8px 16px; font-size: 0.85rem; }
@@ -80,7 +82,7 @@
         </div>
         <div class="control-group">
             <label>💡 Ambient Light <span id="ambientValue">0.50</span></label>
-            <input type="range" id="ambientSlider" min="0" max="3.0" step="0.01" value="0.5">
+            <input type="range" id="ambientSlider" min="0" max="10" step="0.1" value="0.5">
         </div>
         <div class="control-group">
             <label>🌓 Shadow Intensity <span id="shadowValue">2.00</span></label>
@@ -95,8 +97,8 @@
             <input type="range" id="timeSlider" min="6" max="18" step="0.1" value="12">
         </div>
         <div class="control-group">
-            <label>✏️ Edge Lines (Width) <span id="edgeValue">2.0</span></label>
-            <input type="range" id="edgeSlider" min="0" max="8" step="0.1" value="2.0">
+            <label>✏️ Edge Width <span id="edgeValue">2.0</span></label>
+            <input type="range" id="edgeSlider" min="0" max="4" step="0.1" value="2.0">
         </div>
         <button class="action-btn" id="resetViewBtn">🎯 Reset View</button>
         <button class="action-btn" id="resetAllBtn">↺ Reset All</button>
@@ -206,9 +208,9 @@
         composer.addPass(renderPass);
 
         const outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
-        outlinePass.edgeStrength = 3.0;
+        outlinePass.edgeStrength = 5.0;      // fixed high strength for solid black
         outlinePass.edgeGlow = 0.0;
-        outlinePass.edgeThickness = 2.0;
+        outlinePass.edgeThickness = 2.0;     // controlled by slider
         outlinePass.pulsePeriod = 0;
         outlinePass.visibleEdgeColor.set(0x000000);
         outlinePass.hiddenEdgeColor.set(0x000000);
@@ -286,8 +288,8 @@
                 (err) => {
                     console.error('❌ Model load failed:', err);
                     statusMsg.innerHTML = `
-                        ❌ Failed to load: <span style="color:#ff6b6b;">${fileName}</span><br>
-                        <span class="small">Checked: ${url}</span><br>
+                        <span class="error">❌ Failed to load: ${fileName}</span><br>
+                        <span class="small">Tried: ${url}</span><br>
                         <span style="color:#888;font-size:0.8rem;">Loading fallback box instead...</span>
                     `;
                     // Load fallback
@@ -305,9 +307,11 @@
             );
         }
 
+        // --- Determine the base URL ---
+        // If the page is served from a subdirectory, we need to use that.
+        const baseUrl = window.location.href.replace(/\/[^/]*$/, '/');
+
         if (modelFile) {
-            // Construct full URL relative to the current page
-            const baseUrl = window.location.href.replace(/\/[^/]*$/, '/');
             const fullUrl = baseUrl + modelFile;
             loadModel(fullUrl);
         } else {
@@ -348,7 +352,7 @@
         ambientSlider.addEventListener('input', () => {
             const val = parseFloat(ambientSlider.value);
             ambientLight.intensity = val;
-            ambientVal.textContent = val.toFixed(2);
+            ambientVal.textContent = val.toFixed(1);
         });
 
         shadowSlider.addEventListener('input', () => {
@@ -375,7 +379,7 @@
             const val = parseFloat(edgeSlider.value);
             edgeVal.textContent = val.toFixed(1);
             outlinePass.edgeThickness = val;
-            outlinePass.edgeStrength = Math.min(8, val * 1.5 + 1);
+            // edgeStrength stays fixed at 5 (strong black)
         });
 
         autoRotateCheck.addEventListener('change', () => {
@@ -395,7 +399,7 @@
             renderer.toneMappingExposure = 1.0;
 
             ambientSlider.value = '0.5';
-            ambientVal.textContent = '0.50';
+            ambientVal.textContent = '0.5';
             ambientLight.intensity = 0.5;
 
             shadowSlider.value = '2.0';
@@ -413,7 +417,7 @@
             edgeSlider.value = '2.0';
             edgeVal.textContent = '2.0';
             outlinePass.edgeThickness = 2.0;
-            outlinePass.edgeStrength = 4.0;
+            outlinePass.edgeStrength = 5.0;
 
             autoRotateCheck.checked = false;
             controls.autoRotate = false;
