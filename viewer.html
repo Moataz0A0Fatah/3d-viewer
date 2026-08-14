@@ -83,21 +83,21 @@
             <input type="range" id="exposureSlider" min="0.2" max="2.5" step="0.01" value="1.0">
         </div>
         <div class="control-group">
-            <label>☀️ Sun Time <span id="timeValue">12:00</span></label>
-            <input type="range" id="timeSlider" min="6" max="18" step="0.1" value="12">
+            <label>☀️ Sun Time <span id="timeValue">10:00</span></label>
+            <input type="range" id="timeSlider" min="6" max="18" step="0.1" value="10">
         </div>
         <hr style="border-color:#444; width:100%;">
         <div class="control-group">
-            <label>💡 Fill Light Intensity <span id="fillIntensityValue">0.30</span></label>
-            <input type="range" id="fillIntensitySlider" min="0" max="1.0" step="0.01" value="0.3">
+            <label>💡 Fill Intensity <span id="fillIntensityValue">0.50</span></label>
+            <input type="range" id="fillIntensitySlider" min="0" max="1.0" step="0.01" value="0.5">
         </div>
         <div class="control-group">
-            <label>💡 Fill Azimuth <span id="fillAzimuthValue">180</span></label>
-            <input type="range" id="fillAzimuthSlider" min="0" max="360" step="1" value="180">
+            <label>💡 Fill Azimuth <span id="fillAzimuthValue">135</span></label>
+            <input type="range" id="fillAzimuthSlider" min="0" max="360" step="1" value="135">
         </div>
         <div class="control-group">
-            <label>💡 Fill Elevation <span id="fillElevationValue">30</span></label>
-            <input type="range" id="fillElevationSlider" min="0" max="90" step="1" value="30">
+            <label>💡 Fill Elevation <span id="fillElevationValue">45</span></label>
+            <input type="range" id="fillElevationSlider" min="0" max="90" step="1" value="45">
         </div>
         <button class="action-btn" id="resetViewBtn">🎯 Reset View</button>
         <button class="action-btn" id="resetAllBtn">↺ Reset All</button>
@@ -151,7 +151,7 @@
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 1.0; // controlled by slider
+        renderer.toneMappingExposure = 1.0;
         container.appendChild(renderer.domElement);
 
         const controls = new OrbitControls(camera, renderer.domElement);
@@ -162,7 +162,15 @@
 
         // --- Lights ---
 
-        // 1. Sun (directional) – casts shadows
+        // 1. Ambient – low intensity to prevent pure black
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.08);
+        scene.add(ambientLight);
+
+        // 2. Hemisphere – even fill from sky and ground
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x88aaff, 0.6);
+        scene.add(hemiLight);
+
+        // 3. Sun (directional) – casts shadows
         const sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
         sunLight.position.set(5, 10, 7);
         sunLight.castShadow = true;
@@ -178,14 +186,10 @@
         sunLight.shadow.radius = 4;
         scene.add(sunLight);
 
-        // 2. Fill light (directional) – no shadows, positionable
-        const fillLight = new THREE.DirectionalLight(0x88aaff, 0.3);
+        // 4. Fill light (directional) – extra control, no shadows
+        const fillLight = new THREE.DirectionalLight(0xaaccff, 0.5);
         fillLight.position.set(-5, 5, 5);
         scene.add(fillLight);
-
-        // Small ambient to avoid complete darkness
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.05);
-        scene.add(ambientLight);
 
         // --- Ground plane (shadow catcher) ---
         const groundGeo = new THREE.PlaneGeometry(20, 20);
@@ -241,7 +245,6 @@
                             node.castShadow = true;
                             node.receiveShadow = true;
                             if (node.material) {
-                                // Ensure material responds to lights
                                 const oldMat = node.material;
                                 const newMat = new THREE.MeshStandardMaterial({
                                     color: oldMat.color ? oldMat.color : 0xffffff,
@@ -370,19 +373,19 @@
             exposureVal.textContent = '1.00';
             renderer.toneMappingExposure = 1.0;
 
-            timeSlider.value = '12';
-            timeVal.textContent = '12:00';
-            updateSunDirection(12);
+            timeSlider.value = '10';
+            timeVal.textContent = '10:00';
+            updateSunDirection(10);
 
-            fillIntensitySlider.value = '0.3';
-            fillIntensityVal.textContent = '0.30';
-            fillLight.intensity = 0.3;
+            fillIntensitySlider.value = '0.5';
+            fillIntensityVal.textContent = '0.50';
+            fillLight.intensity = 0.5;
 
-            fillAzimuthSlider.value = '180';
-            fillAzimuthVal.textContent = '180';
-            fillElevationSlider.value = '30';
-            fillElevationVal.textContent = '30';
-            updateFillPosition(180, 30);
+            fillAzimuthSlider.value = '135';
+            fillAzimuthVal.textContent = '135';
+            fillElevationSlider.value = '45';
+            fillElevationVal.textContent = '45';
+            updateFillPosition(135, 45);
 
             autoRotateCheck.checked = false;
             controls.autoRotate = false;
@@ -392,10 +395,10 @@
             resetViewBtn.click();
         });
 
-        // Init
-        updateSunDirection(12);
-        updateFillPosition(180, 30);
-        timeVal.textContent = '12:00';
+        // Init – default time 10:00, fill at 135° azimuth, 45° elevation
+        updateSunDirection(10);
+        updateFillPosition(135, 45);
+        timeVal.textContent = '10:00';
 
         // --- Resize ---
         window.addEventListener('resize', () => {
@@ -414,7 +417,7 @@
         }
         animate();
 
-        window.THREE_VIEWER = { scene, camera, renderer, controls, sunLight, fillLight };
+        window.THREE_VIEWER = { scene, camera, renderer, controls, sunLight, fillLight, hemiLight, ambientLight };
     </script>
 </body>
 </html>
