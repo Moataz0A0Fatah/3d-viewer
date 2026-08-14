@@ -13,7 +13,7 @@
             position: absolute; bottom: 30px; right: 30px; z-index: 10;
             background: rgba(20,20,20,0.92); backdrop-filter: blur(8px);
             padding: 18px 22px; border-radius: 16px; border: 1px solid #444;
-            display: flex; flex-direction: column; gap: 12px; min-width: 220px;
+            display: flex; flex-direction: column; gap: 12px; min-width: 200px;
             max-height: 80vh; overflow-y: auto;
             box-shadow: 0 4px 30px rgba(0,0,0,0.8);
         }
@@ -78,10 +78,6 @@
             <input type="checkbox" id="sunToggle" checked>
             <label for="sunToggle">☀️ Sun On/Off</label>
         </div>
-        <div class="checkbox-group">
-            <input type="checkbox" id="wireframeToggle">
-            <label for="wireframeToggle">🔲 Wireframe Overlay</label>
-        </div>
         <div class="control-group">
             <label>🔆 Brightness <span id="exposureValue">1.00</span></label>
             <input type="range" id="exposureSlider" min="0.2" max="2.5" step="0.01" value="1.0">
@@ -95,16 +91,8 @@
             <input type="range" id="shadowSlider" min="0" max="2.0" step="0.01" value="1.0">
         </div>
         <div class="control-group">
-            <label>🌑 Shadow Transparency <span id="shadowOpacityValue">0.40</span></label>
-            <input type="range" id="shadowOpacitySlider" min="0" max="1.0" step="0.01" value="0.4">
-        </div>
-        <div class="control-group">
             <label>☀️ Sun Position (Time) <span id="timeValue">12:00</span></label>
             <input type="range" id="timeSlider" min="6" max="18" step="0.1" value="12">
-        </div>
-        <div class="control-group">
-            <label>✏️ Edge Width <span id="edgeValue">2.0</span></label>
-            <input type="range" id="edgeSlider" min="0" max="10" step="0.1" value="2.0">
         </div>
         <button class="action-btn" id="resetViewBtn">🎯 Reset View</button>
         <button class="action-btn" id="resetAllBtn">↺ Reset All</button>
@@ -125,10 +113,6 @@
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-        import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
-        import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
         // --- DOM refs ---
         const statusMsg = document.getElementById('statusMsg');
@@ -140,15 +124,10 @@
         const ambientVal = document.getElementById('ambientValue');
         const shadowSlider = document.getElementById('shadowSlider');
         const shadowVal = document.getElementById('shadowValue');
-        const shadowOpacitySlider = document.getElementById('shadowOpacitySlider');
-        const shadowOpacityVal = document.getElementById('shadowOpacityValue');
         const timeSlider = document.getElementById('timeSlider');
         const timeVal = document.getElementById('timeValue');
-        const edgeSlider = document.getElementById('edgeSlider');
-        const edgeVal = document.getElementById('edgeValue');
         const autoRotateCheck = document.getElementById('autoRotateCheck');
         const sunToggle = document.getElementById('sunToggle');
-        const wireframeToggle = document.getElementById('wireframeToggle');
         const resetViewBtn = document.getElementById('resetViewBtn');
         const resetAllBtn = document.getElementById('resetAllBtn');
 
@@ -179,7 +158,7 @@
         const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
         scene.add(ambientLight);
 
-        // Hemisphere light for fill from above/below
+        // Hemisphere light for fill from above/below (helps with ambient)
         const hemiLight = new THREE.HemisphereLight(0xffffff, 0x404060, 0.6);
         scene.add(hemiLight);
 
@@ -198,15 +177,11 @@
         mainLight.shadow.bias = -0.001;
         scene.add(mainLight);
 
-        // --- Ground plane (shadow receiver) ---
+        // --- Ground plane (very subtle, just for shadows, aligned with model) ---
         const groundGeo = new THREE.PlaneGeometry(20, 20);
-        const groundMat = new THREE.MeshStandardMaterial({
-            color: 0x222222,
-            transparent: true,
-            opacity: 0.4,
-            roughness: 1,
-            metalness: 0,
-            depthWrite: false,
+        const groundMat = new THREE.ShadowMaterial({
+            opacity: 0.15,
+            color: 0x000000,
         });
         const ground = new THREE.Mesh(groundGeo, groundMat);
         ground.rotation.x = -Math.PI / 2;
@@ -214,40 +189,17 @@
         ground.receiveShadow = true;
         scene.add(ground);
 
-        const gridHelper = new THREE.GridHelper(20, 20, 0x666666, 0x333333);
-        gridHelper.position.set(0, -0.01, 0);
-        scene.add(gridHelper);
-
-        // --- Post-processing (Outline) ---
-        const composer = new EffectComposer(renderer);
-        const renderPass = new RenderPass(scene, camera);
-        composer.addPass(renderPass);
-
-        const outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
-        outlinePass.edgeStrength = 5.0;
-        outlinePass.edgeGlow = 0.0;
-        outlinePass.edgeThickness = 2.0;
-        outlinePass.pulsePeriod = 0;
-        outlinePass.visibleEdgeColor.set(0x000000);
-        outlinePass.hiddenEdgeColor.set(0x000000);
-        composer.addPass(outlinePass);
-
-        const outputPass = new OutputPass();
-        composer.addPass(outputPass);
-
         // --- Model loading ---
         const urlParams = new URLSearchParams(window.location.search);
         let modelFile = urlParams.get('model');
 
         let modelGroup = null;
-        let wireframeGroup = null;
 
-        function repositionGroundAndGrid(box) {
+        function repositionGround(box) {
             const centerX = (box.min.x + box.max.x) / 2;
             const centerZ = (box.min.z + box.max.z) / 2;
             const bottomY = box.min.y - 0.01;
             ground.position.set(centerX, bottomY, centerZ);
-            gridHelper.position.set(centerX, bottomY, centerZ);
         }
 
         function fitCameraToGroup(group) {
@@ -258,7 +210,7 @@
             camera.position.set(0, distance * 0.6, distance);
             controls.target.copy(box.center);
             controls.update();
-            repositionGroundAndGrid(box);
+            repositionGround(box);
         }
 
         function loadModel(url) {
@@ -273,10 +225,6 @@
                     if (modelGroup) {
                         scene.remove(modelGroup);
                     }
-                    if (wireframeGroup) {
-                        scene.remove(wireframeGroup);
-                        wireframeGroup = null;
-                    }
                     modelGroup = gltf.scene;
                     // Enable shadows and ensure materials are standard
                     modelGroup.traverse((node) => {
@@ -284,27 +232,23 @@
                             node.castShadow = true;
                             node.receiveShadow = true;
                             if (node.material) {
-                                // Ensure material is responsive to lights
-                                if (node.material.isMeshStandardMaterial || node.material.isMeshPhongMaterial) {
-                                    node.material.needsUpdate = true;
-                                } else {
-                                    // Convert to standard material to respond to lights
-                                    const oldMat = node.material;
-                                    const newMat = new THREE.MeshStandardMaterial({
-                                        color: oldMat.color ? oldMat.color : 0xffffff,
-                                        map: oldMat.map || undefined,
-                                        roughness: oldMat.roughness !== undefined ? oldMat.roughness : 0.5,
-                                        metalness: oldMat.metalness !== undefined ? oldMat.metalness : 0.0,
-                                    });
-                                    node.material = newMat;
-                                    node.material.needsUpdate = true;
-                                }
+                                // Convert any material to MeshStandardMaterial to ensure lighting response
+                                const oldMat = node.material;
+                                const newMat = new THREE.MeshStandardMaterial({
+                                    color: oldMat.color ? oldMat.color : 0xffffff,
+                                    map: oldMat.map || undefined,
+                                    roughness: oldMat.roughness !== undefined ? oldMat.roughness : 0.5,
+                                    metalness: oldMat.metalness !== undefined ? oldMat.metalness : 0.0,
+                                    envMap: null, // remove environment map to use scene lights
+                                    emissive: new THREE.Color(0x000000),
+                                });
+                                node.material = newMat;
+                                node.material.needsUpdate = true;
                             }
                         }
                     });
                     scene.add(modelGroup);
                     fitCameraToGroup(modelGroup);
-                    outlinePass.selectedObjects = [modelGroup];
                     console.log('✅ Model loaded:', url);
                 },
                 undefined,
@@ -365,24 +309,12 @@
             shadowVal.textContent = val.toFixed(2);
         });
 
-        shadowOpacitySlider.addEventListener('input', () => {
-            const val = parseFloat(shadowOpacitySlider.value);
-            ground.material.opacity = val;
-            shadowOpacityVal.textContent = val.toFixed(2);
-        });
-
         timeSlider.addEventListener('input', () => {
             const time = parseFloat(timeSlider.value);
             const hours = Math.floor(time);
             const minutes = Math.round((time - hours) * 60);
             timeVal.textContent = `${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}`;
             updateSunDirection(time);
-        });
-
-        edgeSlider.addEventListener('input', () => {
-            const val = parseFloat(edgeSlider.value);
-            edgeVal.textContent = val.toFixed(1);
-            outlinePass.edgeThickness = val;
         });
 
         autoRotateCheck.addEventListener('change', () => {
@@ -392,37 +324,6 @@
 
         sunToggle.addEventListener('change', () => {
             mainLight.visible = sunToggle.checked;
-        });
-
-        // Wireframe toggle – adds a wireframe overlay on the model
-        wireframeToggle.addEventListener('change', () => {
-            if (!modelGroup) return;
-            if (wireframeToggle.checked) {
-                if (!wireframeGroup) {
-                    wireframeGroup = new THREE.Group();
-                    modelGroup.traverse((node) => {
-                        if (node.isMesh) {
-                            const wireframeMat = new THREE.MeshBasicMaterial({
-                                color: 0xffffff,
-                                wireframe: true,
-                                transparent: true,
-                                opacity: 0.3,
-                            });
-                            const wireframeMesh = new THREE.Mesh(node.geometry.clone(), wireframeMat);
-                            wireframeMesh.position.copy(node.position);
-                            wireframeMesh.rotation.copy(node.rotation);
-                            wireframeMesh.scale.copy(node.scale);
-                            wireframeGroup.add(wireframeMesh);
-                        }
-                    });
-                    scene.add(wireframeGroup);
-                }
-            } else {
-                if (wireframeGroup) {
-                    scene.remove(wireframeGroup);
-                    wireframeGroup = null;
-                }
-            }
         });
 
         resetViewBtn.addEventListener('click', () => {
@@ -444,29 +345,15 @@
             shadowVal.textContent = '1.00';
             mainLight.intensity = 1.0;
 
-            shadowOpacitySlider.value = '0.4';
-            shadowOpacityVal.textContent = '0.40';
-            ground.material.opacity = 0.4;
-
             timeSlider.value = '12';
             timeVal.textContent = '12:00';
             updateSunDirection(12);
-
-            edgeSlider.value = '2.0';
-            edgeVal.textContent = '2.0';
-            outlinePass.edgeThickness = 2.0;
 
             autoRotateCheck.checked = false;
             controls.autoRotate = false;
 
             sunToggle.checked = true;
             mainLight.visible = true;
-
-            wireframeToggle.checked = false;
-            if (wireframeGroup) {
-                scene.remove(wireframeGroup);
-                wireframeGroup = null;
-            }
 
             resetViewBtn.click();
         });
@@ -481,19 +368,17 @@
             camera.aspect = w / h;
             camera.updateProjectionMatrix();
             renderer.setSize(w, h);
-            composer.setSize(w, h);
-            outlinePass.resolution.set(w, h);
         });
 
         // --- Animation loop ---
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
-            composer.render();
+            renderer.render(scene, camera);
         }
         animate();
 
-        window.THREE_VIEWER = { scene, camera, renderer, controls, mainLight, outlinePass, ambientLight, ground };
+        window.THREE_VIEWER = { scene, camera, renderer, controls, mainLight, ambientLight, ground };
     </script>
 </body>
 </html>
