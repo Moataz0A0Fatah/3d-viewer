@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>3D Viewer (Three.js)</title>
+    <title>3D Viewer – Measure & Sections</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
         body { background: #111; overflow: hidden; }
@@ -13,7 +13,7 @@
             position: absolute; bottom: 30px; right: 30px; z-index: 10;
             background: rgba(20,20,20,0.92); backdrop-filter: blur(8px);
             padding: 18px 22px; border-radius: 16px; border: 1px solid #444;
-            display: flex; flex-direction: column; gap: 12px; min-width: 200px;
+            display: flex; flex-direction: column; gap: 12px; min-width: 210px;
             max-height: 80vh; overflow-y: auto;
             box-shadow: 0 4px 30px rgba(0,0,0,0.8);
         }
@@ -57,10 +57,39 @@
         }
         .status-msg .error { color: #ff6b6b; }
         .status-msg .small { font-size: 0.8rem; color: #666; }
+
+        /* Measure label (top-left overlay) */
+        .measure-label {
+            position: absolute; top: 80px; left: 20px; z-index: 20;
+            background: rgba(0,0,0,0.7); color: #4caf50;
+            padding: 8px 16px; border-radius: 8px;
+            font-size: 0.9rem; font-family: monospace;
+            border: 1px solid #4caf50;
+            pointer-events: none;
+            display: none;
+        }
+        .measure-label.active { display: block; }
+
+        .section-controls {
+            border-top: 1px solid #444; padding-top: 10px;
+            margin-top: 4px;
+        }
+        .section-controls .row {
+            display: flex; align-items: center; gap: 8px;
+            margin-top: 4px;
+        }
+        .section-controls .row label {
+            color: #aaa; font-size: 0.7rem; width: 20px;
+        }
+        .section-controls .row input[type="range"] {
+            flex: 1;
+        }
+
         @media (max-width: 600px) {
             .controls-panel { bottom: 15px; right: 15px; padding: 12px 16px; min-width: 170px; max-height: 60vh; gap: 8px; }
             .back-btn { top: 15px; left: 15px; padding: 8px 16px; font-size: 0.85rem; }
             .model-title { top: 15px; right: 15px; padding: 6px 14px; font-size: 0.75rem; }
+            .measure-label { top: 70px; font-size: 0.8rem; }
         }
     </style>
 </head>
@@ -69,7 +98,10 @@
     <div class="model-title" id="modelTitle">Loading...</div>
     <div class="status-msg" id="statusMsg">⏳ Loading model...</div>
 
+    <div class="measure-label" id="measureLabel">📏 0.00 m</div>
+
     <div class="controls-panel">
+        <!-- Existing controls -->
         <div class="checkbox-group">
             <input type="checkbox" id="autoRotateCheck">
             <label for="autoRotateCheck">🔄 Auto-Rotate</label>
@@ -79,7 +111,7 @@
             <label for="sunToggle">☀️ Sun On/Off</label>
         </div>
         <div class="control-group">
-            <label>🔆 Brightness (Exposure) <span id="exposureValue">1.00</span></label>
+            <label>🔆 Brightness <span id="exposureValue">1.00</span></label>
             <input type="range" id="exposureSlider" min="0.2" max="2.5" step="0.01" value="1.0">
         </div>
         <div class="control-group">
@@ -99,6 +131,33 @@
             <label>💡 Fill Elevation <span id="fillElevationValue">45</span></label>
             <input type="range" id="fillElevationSlider" min="0" max="90" step="1" value="45">
         </div>
+
+        <!-- Measure button -->
+        <button class="action-btn" id="measureBtn">📏 Measure (click 2 points)</button>
+
+        <!-- Section slices -->
+        <div class="section-controls">
+            <div style="color:#aaa; font-size:0.75rem; margin-bottom:4px;">✂️ Section Slices</div>
+            <div class="row">
+                <input type="checkbox" id="clipX">
+                <label style="width:auto; color:#ff6b6b;">X</label>
+                <input type="range" id="clipXSlider" min="-5" max="5" step="0.01" value="0">
+                <span id="clipXVal" style="color:#888;font-size:0.7rem;width:30px;">0.00</span>
+            </div>
+            <div class="row">
+                <input type="checkbox" id="clipY">
+                <label style="width:auto; color:#4caf50;">Y</label>
+                <input type="range" id="clipYSlider" min="-5" max="5" step="0.01" value="0">
+                <span id="clipYVal" style="color:#888;font-size:0.7rem;width:30px;">0.00</span>
+            </div>
+            <div class="row">
+                <input type="checkbox" id="clipZ">
+                <label style="width:auto; color:#4a9eff;">Z</label>
+                <input type="range" id="clipZSlider" min="-5" max="5" step="0.01" value="0">
+                <span id="clipZVal" style="color:#888;font-size:0.7rem;width:30px;">0.00</span>
+            </div>
+        </div>
+
         <button class="action-btn" id="resetViewBtn">🎯 Reset View</button>
         <button class="action-btn" id="resetAllBtn">↺ Reset All</button>
     </div>
@@ -122,6 +181,7 @@
         // --- DOM refs ---
         const statusMsg = document.getElementById('statusMsg');
         const titleEl = document.getElementById('modelTitle');
+        const measureLabel = document.getElementById('measureLabel');
 
         const exposureSlider = document.getElementById('exposureSlider');
         const exposureVal = document.getElementById('exposureValue');
@@ -137,6 +197,17 @@
         const sunToggle = document.getElementById('sunToggle');
         const resetViewBtn = document.getElementById('resetViewBtn');
         const resetAllBtn = document.getElementById('resetAllBtn');
+        const measureBtn = document.getElementById('measureBtn');
+
+        const clipX = document.getElementById('clipX');
+        const clipY = document.getElementById('clipY');
+        const clipZ = document.getElementById('clipZ');
+        const clipXSlider = document.getElementById('clipXSlider');
+        const clipYSlider = document.getElementById('clipYSlider');
+        const clipZSlider = document.getElementById('clipZSlider');
+        const clipXVal = document.getElementById('clipXVal');
+        const clipYVal = document.getElementById('clipYVal');
+        const clipZVal = document.getElementById('clipZVal');
 
         // --- Three.js setup ---
         const container = document.getElementById('canvasContainer');
@@ -152,6 +223,8 @@
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.toneMappingExposure = 1.0;
+        // Enable local clipping
+        renderer.localClippingEnabled = true;
         container.appendChild(renderer.domElement);
 
         const controls = new OrbitControls(camera, renderer.domElement);
@@ -161,16 +234,12 @@
         controls.update();
 
         // --- Lights ---
-
-        // 1. Ambient – low intensity to prevent pure black
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.08);
         scene.add(ambientLight);
 
-        // 2. Hemisphere – even fill from sky and ground
         const hemiLight = new THREE.HemisphereLight(0xffffff, 0x88aaff, 0.6);
         scene.add(hemiLight);
 
-        // 3. Sun (directional) – casts shadows
         const sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
         sunLight.position.set(5, 10, 7);
         sunLight.castShadow = true;
@@ -186,12 +255,11 @@
         sunLight.shadow.radius = 4;
         scene.add(sunLight);
 
-        // 4. Fill light (directional) – extra control, no shadows
         const fillLight = new THREE.DirectionalLight(0xaaccff, 0.5);
         fillLight.position.set(-5, 5, 5);
         scene.add(fillLight);
 
-        // --- Ground plane (shadow catcher) ---
+        // --- Ground plane ---
         const groundGeo = new THREE.PlaneGeometry(20, 20);
         const groundMat = new THREE.ShadowMaterial({
             opacity: 0.2,
@@ -202,6 +270,15 @@
         ground.position.set(0, -0.01, 0);
         ground.receiveShadow = true;
         scene.add(ground);
+
+        // --- Clipping planes ---
+        const clipPlanes = {
+            x: new THREE.Plane(new THREE.Vector3(1, 0, 0), 0),
+            y: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
+            z: new THREE.Plane(new THREE.Vector3(0, 0, 1), 0),
+        };
+        // We'll store active planes in an array
+        let activeClipPlanes = [];
 
         // --- Model loading ---
         const urlParams = new URLSearchParams(window.location.search);
@@ -225,6 +302,47 @@
             controls.target.copy(box.center);
             controls.update();
             repositionGround(box);
+            // Update slider ranges based on bounding box
+            const ext = size.length() / 2 + 0.5;
+            clipXSlider.min = -ext;
+            clipXSlider.max = ext;
+            clipYSlider.min = -ext;
+            clipYSlider.max = ext;
+            clipZSlider.min = -ext;
+            clipZSlider.max = ext;
+            clipXSlider.value = 0;
+            clipYSlider.value = 0;
+            clipZSlider.value = 0;
+            clipXVal.textContent = '0.00';
+            clipYVal.textContent = '0.00';
+            clipZVal.textContent = '0.00';
+        }
+
+        function updateClipping() {
+            // Collect active planes
+            const planes = [];
+            if (clipX.checked) planes.push(clipPlanes.x);
+            if (clipY.checked) planes.push(clipPlanes.y);
+            if (clipZ.checked) planes.push(clipPlanes.z);
+            activeClipPlanes = planes;
+            // Apply to model materials
+            if (modelGroup) {
+                modelGroup.traverse((node) => {
+                    if (node.isMesh) {
+                        if (Array.isArray(node.material)) {
+                            node.material.forEach(mat => {
+                                mat.clippingPlanes = planes.length ? planes : null;
+                                mat.clipShadows = true;
+                                mat.needsUpdate = true;
+                            });
+                        } else {
+                            node.material.clippingPlanes = planes.length ? planes : null;
+                            node.material.clipShadows = true;
+                            node.material.needsUpdate = true;
+                        }
+                    }
+                });
+            }
         }
 
         function loadModel(url) {
@@ -240,6 +358,7 @@
                         scene.remove(modelGroup);
                     }
                     modelGroup = gltf.scene;
+                    // Convert materials and enable clipping
                     modelGroup.traverse((node) => {
                         if (node.isMesh) {
                             node.castShadow = true;
@@ -253,6 +372,8 @@
                                     metalness: oldMat.metalness !== undefined ? oldMat.metalness : 0.0,
                                     envMap: null,
                                     emissive: new THREE.Color(0x000000),
+                                    clippingPlanes: null,
+                                    clipShadows: true,
                                 });
                                 node.material = newMat;
                                 node.material.needsUpdate = true;
@@ -261,6 +382,8 @@
                     });
                     scene.add(modelGroup);
                     fitCameraToGroup(modelGroup);
+                    // Apply clipping if any checkboxes are active
+                    updateClipping();
                     console.log('✅ Model loaded:', url);
                 },
                 undefined,
@@ -290,7 +413,6 @@
 
         // --- Controls ---
 
-        // Sun position (Time of Day)
         function updateSunDirection(time) {
             const t = (time - 6) / 12;
             const azimuthDeg = 90 + t * 180;
@@ -305,7 +427,6 @@
             sunLight.target.updateMatrixWorld();
         }
 
-        // Fill light position from azimuth/elevation
         function updateFillPosition(azimuthDeg, elevationDeg) {
             const azimuthRad = azimuthDeg * Math.PI / 180;
             const elevationRad = elevationDeg * Math.PI / 180;
@@ -318,7 +439,7 @@
             fillLight.target.updateMatrixWorld();
         }
 
-        // Brightness = exposure
+        // Brightness (exposure)
         exposureSlider.addEventListener('input', () => {
             const val = parseFloat(exposureSlider.value);
             renderer.toneMappingExposure = val;
@@ -392,10 +513,139 @@
             sunToggle.checked = true;
             sunLight.visible = true;
 
+            // Reset clipping
+            clipX.checked = false;
+            clipY.checked = false;
+            clipZ.checked = false;
+            clipXSlider.value = 0;
+            clipYSlider.value = 0;
+            clipZSlider.value = 0;
+            clipXVal.textContent = '0.00';
+            clipYVal.textContent = '0.00';
+            clipZVal.textContent = '0.00';
+            updateClipping();
+            // Remove measure line
+            if (measureLine) {
+                scene.remove(measureLine);
+                measureLine = null;
+            }
+            measureLabel.classList.remove('active');
+
             resetViewBtn.click();
         });
 
-        // Init – default time 10:00, fill at 135° azimuth, 45° elevation
+        // --- Clipping controls ---
+        clipX.addEventListener('change', updateClipping);
+        clipY.addEventListener('change', updateClipping);
+        clipZ.addEventListener('change', updateClipping);
+
+        clipXSlider.addEventListener('input', () => {
+            const val = parseFloat(clipXSlider.value);
+            clipXVal.textContent = val.toFixed(2);
+            clipPlanes.x.constant = val;
+            if (clipX.checked) updateClipping();
+        });
+        clipYSlider.addEventListener('input', () => {
+            const val = parseFloat(clipYSlider.value);
+            clipYVal.textContent = val.toFixed(2);
+            clipPlanes.y.constant = val;
+            if (clipY.checked) updateClipping();
+        });
+        clipZSlider.addEventListener('input', () => {
+            const val = parseFloat(clipZSlider.value);
+            clipZVal.textContent = val.toFixed(2);
+            clipPlanes.z.constant = val;
+            if (clipZ.checked) updateClipping();
+        });
+
+        // --- Measure tool ---
+        let measurePoints = [];
+        let measureLine = null;
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
+
+        function getIntersection(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            raycaster.setFromCamera(pointer, camera);
+            // Check against model group
+            if (!modelGroup) return null;
+            const meshes = [];
+            modelGroup.traverse((node) => {
+                if (node.isMesh) meshes.push(node);
+            });
+            const intersects = raycaster.intersectObjects(meshes);
+            if (intersects.length > 0) {
+                return intersects[0].point;
+            }
+            return null;
+        }
+
+        function createMeasureLine(p1, p2) {
+            if (measureLine) {
+                scene.remove(measureLine);
+                measureLine = null;
+            }
+            const points = [p1, p2];
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const material = new THREE.LineBasicMaterial({
+                color: 0x4caf50,
+                linewidth: 2,
+            });
+            const line = new THREE.Line(geometry, material);
+            // Also add small spheres at endpoints
+            const sphereGeo = new THREE.SphereGeometry(0.05, 8, 8);
+            const sphereMat = new THREE.MeshBasicMaterial({ color: 0x4caf50 });
+            const s1 = new THREE.Mesh(sphereGeo, sphereMat);
+            s1.position.copy(p1);
+            const s2 = new THREE.Mesh(sphereGeo, sphereMat);
+            s2.position.copy(p2);
+            const group = new THREE.Group();
+            group.add(line);
+            group.add(s1);
+            group.add(s2);
+            measureLine = group;
+            scene.add(group);
+            // Show distance
+            const dist = p1.distanceTo(p2);
+            measureLabel.textContent = `📏 ${dist.toFixed(3)} m`;
+            measureLabel.classList.add('active');
+        }
+
+        measureBtn.addEventListener('click', () => {
+            if (!modelGroup) {
+                alert('Please load a model first.');
+                return;
+            }
+            // Switch to measure mode: click two points
+            measurePoints = [];
+            measureLabel.textContent = '📏 Click first point on model';
+            measureLabel.classList.add('active');
+            // Remove old line
+            if (measureLine) {
+                scene.remove(measureLine);
+                measureLine = null;
+            }
+            // Use a temporary click handler
+            const onClick = (event) => {
+                const point = getIntersection(event);
+                if (!point) return;
+                measurePoints.push(point.clone());
+                if (measurePoints.length === 1) {
+                    measureLabel.textContent = '📏 Click second point on model';
+                } else if (measurePoints.length === 2) {
+                    // Create line
+                    createMeasureLine(measurePoints[0], measurePoints[1]);
+                    measureLabel.textContent = `📏 ${measurePoints[0].distanceTo(measurePoints[1]).toFixed(3)} m`;
+                    // Remove handler
+                    renderer.domElement.removeEventListener('click', onClick);
+                }
+            };
+            renderer.domElement.addEventListener('click', onClick);
+        });
+
+        // --- Init ---
         updateSunDirection(10);
         updateFillPosition(135, 45);
         timeVal.textContent = '10:00';
@@ -417,7 +667,7 @@
         }
         animate();
 
-        window.THREE_VIEWER = { scene, camera, renderer, controls, sunLight, fillLight, hemiLight, ambientLight };
+        window.THREE_VIEWER = { scene, camera, renderer, controls, sunLight, fillLight, hemiLight, ambientLight, clipPlanes };
     </script>
 </body>
 </html>
