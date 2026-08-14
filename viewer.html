@@ -79,12 +79,8 @@
             <label for="sunToggle">☀️ Sun On/Off</label>
         </div>
         <div class="control-group">
-            <label>🔆 Brightness <span id="exposureValue">50</span></label>
-            <input type="range" id="exposureSlider" min="0" max="100" step="1" value="50">
-        </div>
-        <div class="control-group">
-            <label>🌓 Shadow Intensity <span id="shadowValue">1.00</span></label>
-            <input type="range" id="shadowSlider" min="0" max="2.0" step="0.01" value="1.0">
+            <label>🔆 Brightness <span id="brightnessValue">1.00</span></label>
+            <input type="range" id="brightnessSlider" min="0" max="100" step="1" value="50">
         </div>
         <div class="control-group">
             <label>☀️ Sun Position (Time) <span id="timeValue">12:00</span></label>
@@ -114,10 +110,8 @@
         const statusMsg = document.getElementById('statusMsg');
         const titleEl = document.getElementById('modelTitle');
 
-        const exposureSlider = document.getElementById('exposureSlider');
-        const exposureVal = document.getElementById('exposureValue');
-        const shadowSlider = document.getElementById('shadowSlider');
-        const shadowVal = document.getElementById('shadowValue');
+        const brightnessSlider = document.getElementById('brightnessSlider');
+        const brightnessVal = document.getElementById('brightnessValue');
         const timeSlider = document.getElementById('timeSlider');
         const timeVal = document.getElementById('timeValue');
         const autoRotateCheck = document.getElementById('autoRotateCheck');
@@ -137,8 +131,9 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        // Fixed exposure – brightness controls lights directly
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 0.5; // default for slider value 50 (0.1–10 range)
+        renderer.toneMappingExposure = 1.0;
         container.appendChild(renderer.domElement);
 
         const controls = new OrbitControls(camera, renderer.domElement);
@@ -147,9 +142,10 @@
         controls.dampingFactor = 0.05;
         controls.update();
 
-        // --- Lights: Only directional (sun) with a tiny hemisphere fill to avoid total black when sun off ---
-        // Minimal fill so shadows are still visible but model isn't pitch black
-        const fillLight = new THREE.HemisphereLight(0xffffff, 0x222222, 0.2);
+        // --- Lights ---
+        // Fill light (always on, dim, scales with brightness)
+        const fillLight = new THREE.DirectionalLight(0x8888ff, 0.3);
+        fillLight.position.set(-5, 3, 5);
         scene.add(fillLight);
 
         // Main directional light (sun)
@@ -280,18 +276,19 @@
             mainLight.target.updateMatrixWorld();
         }
 
-        // Brightness: 0–100 maps to exposure 0.1–10
-        exposureSlider.addEventListener('input', () => {
-            const val = parseFloat(exposureSlider.value);
-            const exposure = 0.1 + (val / 100) * 9.9; // maps 0→0.1, 100→10.0
-            renderer.toneMappingExposure = exposure;
-            exposureVal.textContent = Math.round(val);
-        });
+        // Brightness: controls main light intensity AND fill light intensity
+        // 0–100 maps to intensity 0–3 for main, 0–0.9 for fill
+        function updateBrightness(value) {
+            const val = parseFloat(value);
+            const mainIntensity = (val / 100) * 3.0;
+            const fillIntensity = (val / 100) * 0.9;
+            mainLight.intensity = mainIntensity;
+            fillLight.intensity = fillIntensity;
+            brightnessVal.textContent = mainIntensity.toFixed(2);
+        }
 
-        shadowSlider.addEventListener('input', () => {
-            const val = parseFloat(shadowSlider.value);
-            mainLight.intensity = val;
-            shadowVal.textContent = val.toFixed(2);
+        brightnessSlider.addEventListener('input', () => {
+            updateBrightness(brightnessSlider.value);
         });
 
         timeSlider.addEventListener('input', () => {
@@ -309,6 +306,7 @@
 
         sunToggle.addEventListener('change', () => {
             mainLight.visible = sunToggle.checked;
+            // when sun is off, fill light still works (it's always visible)
         });
 
         resetViewBtn.addEventListener('click', () => {
@@ -318,13 +316,8 @@
         });
 
         resetAllBtn.addEventListener('click', () => {
-            exposureSlider.value = '50';
-            exposureVal.textContent = '50';
-            renderer.toneMappingExposure = 0.5;
-
-            shadowSlider.value = '1.0';
-            shadowVal.textContent = '1.00';
-            mainLight.intensity = 1.0;
+            brightnessSlider.value = '50';
+            updateBrightness(50);
 
             timeSlider.value = '12';
             timeVal.textContent = '12:00';
@@ -339,8 +332,10 @@
             resetViewBtn.click();
         });
 
-        // Init sun
+        // --- Init ---
+        updateBrightness(50);
         updateSunDirection(12);
+        timeVal.textContent = '12:00';
 
         // --- Resize ---
         window.addEventListener('resize', () => {
@@ -359,7 +354,7 @@
         }
         animate();
 
-        window.THREE_VIEWER = { scene, camera, renderer, controls, mainLight, ground };
+        window.THREE_VIEWER = { scene, camera, renderer, controls, mainLight, fillLight, ground };
     </script>
 </body>
 </html>
