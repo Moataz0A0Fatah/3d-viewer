@@ -79,12 +79,8 @@
             <label for="sunToggle">☀️ Sun On/Off</label>
         </div>
         <div class="control-group">
-            <label>🔆 Brightness <span id="exposureValue">1.00</span></label>
-            <input type="range" id="exposureSlider" min="0.2" max="2.5" step="0.01" value="1.0">
-        </div>
-        <div class="control-group">
-            <label>💡 Dome Ambient <span id="ambientValue">1.00</span></label>
-            <input type="range" id="ambientSlider" min="0" max="10" step="0.1" value="1.0">
+            <label>🔆 Brightness <span id="exposureValue">50</span></label>
+            <input type="range" id="exposureSlider" min="0" max="100" step="1" value="50">
         </div>
         <div class="control-group">
             <label>🌓 Shadow Intensity <span id="shadowValue">1.00</span></label>
@@ -120,8 +116,6 @@
 
         const exposureSlider = document.getElementById('exposureSlider');
         const exposureVal = document.getElementById('exposureValue');
-        const ambientSlider = document.getElementById('ambientSlider');
-        const ambientVal = document.getElementById('ambientValue');
         const shadowSlider = document.getElementById('shadowSlider');
         const shadowVal = document.getElementById('shadowValue');
         const timeSlider = document.getElementById('timeSlider');
@@ -144,7 +138,7 @@
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 1.0;
+        renderer.toneMappingExposure = 0.5; // default for slider value 50 (0.1–10 range)
         container.appendChild(renderer.domElement);
 
         const controls = new OrbitControls(camera, renderer.domElement);
@@ -153,14 +147,10 @@
         controls.dampingFactor = 0.05;
         controls.update();
 
-        // --- Lights: Dome Ambient (Ambient + Hemisphere) ---
-        // Strong ambient light for even fill
-        const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
-        scene.add(ambientLight);
-
-        // Hemisphere light: sky color from above, ground color from below
-        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x404060, 0.8);
-        scene.add(hemiLight);
+        // --- Lights: Only directional (sun) with a tiny hemisphere fill to avoid total black when sun off ---
+        // Minimal fill so shadows are still visible but model isn't pitch black
+        const fillLight = new THREE.HemisphereLight(0xffffff, 0x222222, 0.2);
+        scene.add(fillLight);
 
         // Main directional light (sun)
         const mainLight = new THREE.DirectionalLight(0xffffff, 1.0);
@@ -177,7 +167,7 @@
         mainLight.shadow.bias = -0.001;
         scene.add(mainLight);
 
-        // --- Ground plane (very subtle shadow catcher) ---
+        // --- Ground plane (shadow catcher) ---
         const groundGeo = new THREE.PlaneGeometry(20, 20);
         const groundMat = new THREE.ShadowMaterial({
             opacity: 0.15,
@@ -226,7 +216,7 @@
                         scene.remove(modelGroup);
                     }
                     modelGroup = gltf.scene;
-                    // Convert all materials to MeshStandardMaterial to respond to lights
+                    // Convert materials to standard and remove env maps
                     modelGroup.traverse((node) => {
                         if (node.isMesh) {
                             node.castShadow = true;
@@ -238,9 +228,8 @@
                                     map: oldMat.map || undefined,
                                     roughness: oldMat.roughness !== undefined ? oldMat.roughness : 0.5,
                                     metalness: oldMat.metalness !== undefined ? oldMat.metalness : 0.0,
-                                    envMap: null, // remove environment map to use scene lights
+                                    envMap: null,
                                     emissive: new THREE.Color(0x000000),
-                                    emissiveIntensity: 0,
                                 });
                                 node.material = newMat;
                                 node.material.needsUpdate = true;
@@ -291,18 +280,12 @@
             mainLight.target.updateMatrixWorld();
         }
 
+        // Brightness: 0–100 maps to exposure 0.1–10
         exposureSlider.addEventListener('input', () => {
             const val = parseFloat(exposureSlider.value);
-            renderer.toneMappingExposure = val;
-            exposureVal.textContent = val.toFixed(2);
-        });
-
-        // Ambient slider controls BOTH ambient and hemisphere lights for a dome effect
-        ambientSlider.addEventListener('input', () => {
-            const val = parseFloat(ambientSlider.value);
-            ambientLight.intensity = val;
-            hemiLight.intensity = val * 0.8; // slightly lower for natural feel
-            ambientVal.textContent = val.toFixed(2);
+            const exposure = 0.1 + (val / 100) * 9.9; // maps 0→0.1, 100→10.0
+            renderer.toneMappingExposure = exposure;
+            exposureVal.textContent = Math.round(val);
         });
 
         shadowSlider.addEventListener('input', () => {
@@ -335,14 +318,9 @@
         });
 
         resetAllBtn.addEventListener('click', () => {
-            exposureSlider.value = '1.0';
-            exposureVal.textContent = '1.00';
-            renderer.toneMappingExposure = 1.0;
-
-            ambientSlider.value = '1.0';
-            ambientVal.textContent = '1.00';
-            ambientLight.intensity = 1.0;
-            hemiLight.intensity = 0.8;
+            exposureSlider.value = '50';
+            exposureVal.textContent = '50';
+            renderer.toneMappingExposure = 0.5;
 
             shadowSlider.value = '1.0';
             shadowVal.textContent = '1.00';
@@ -381,7 +359,7 @@
         }
         animate();
 
-        window.THREE_VIEWER = { scene, camera, renderer, controls, mainLight, ambientLight, hemiLight, ground };
+        window.THREE_VIEWER = { scene, camera, renderer, controls, mainLight, ground };
     </script>
 </body>
 </html>
