@@ -50,7 +50,11 @@
         .status-msg {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             color: #888; font-size: 1.2rem; pointer-events: none; text-align: center; z-index: 0;
+            background: rgba(0,0,0,0.6); padding: 20px 30px; border-radius: 12px;
+            border: 1px solid #333;
         }
+        .status-msg .error { color: #ff6b6b; }
+        .status-msg .success { color: #4caf50; }
         @media (max-width: 600px) {
             .controls-panel { bottom: 15px; right: 15px; padding: 12px 16px; min-width: 170px; max-height: 60vh; gap: 8px; }
             .back-btn { top: 15px; left: 15px; padding: 8px 16px; font-size: 0.85rem; }
@@ -61,7 +65,7 @@
 <body>
     <a href="index.html" class="back-btn">← Back to Library</a>
     <div class="model-title" id="modelTitle">Loading...</div>
-    <div class="status-msg" id="statusMsg">👈 Select a model from the library</div>
+    <div class="status-msg" id="statusMsg">⏳ Loading model...</div>
 
     <div class="controls-panel">
         <div class="checkbox-group">
@@ -176,12 +180,12 @@
         mainLight.shadow.bias = -0.001;
         scene.add(mainLight);
 
-        // Fill light (optional)
+        // Fill light
         const fillLight = new THREE.DirectionalLight(0x446688, 0.3);
         fillLight.position.set(-5, -2, 5);
         scene.add(fillLight);
 
-        // --- Ground plane (will be repositioned after model loads) ---
+        // --- Ground plane ---
         const groundGeo = new THREE.PlaneGeometry(20, 20);
         const groundMat = new THREE.ShadowMaterial({ opacity: 0.4, color: 0x222222 });
         const ground = new THREE.Mesh(groundGeo, groundMat);
@@ -211,6 +215,26 @@
         const outputPass = new OutputPass();
         composer.addPass(outputPass);
 
+        // --- Fallback box (so controls work even without model) ---
+        function createFallbackBox() {
+            const geo = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x4caf50, roughness: 0.3, metalness: 0.1 });
+            const box = new THREE.Mesh(geo, mat);
+            box.castShadow = true;
+            box.receiveShadow = true;
+            box.position.y = 0.75;
+            const group = new THREE.Group();
+            group.add(box);
+            // Add small sphere on top for interest
+            const sphereGeo = new THREE.SphereGeometry(0.3, 16, 16);
+            const sphereMat = new THREE.MeshStandardMaterial({ color: 0xff6b6b, roughness: 0.2 });
+            const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+            sphere.position.set(0, 1.5, 0);
+            sphere.castShadow = true;
+            group.add(sphere);
+            return group;
+        }
+
         // --- Model loading ---
         const urlParams = new URLSearchParams(window.location.search);
         const modelFile = urlParams.get('model');
@@ -218,31 +242,31 @@
         let modelGroup = null;
         let modelLoaded = false;
 
-        function fitCameraToModel(box) {
+        function fitCameraToGroup(group) {
+            const box = new THREE.Box3().setFromObject(group);
             const size = box.max.sub(box.min);
             const maxDim = Math.max(size.x, size.y, size.z);
             const distance = maxDim * 1.8;
             camera.position.set(0, distance * 0.6, distance);
             controls.target.copy(box.center);
             controls.update();
-            // Reposition ground plane to the bottom of the model
             ground.position.y = box.min.y - 0.01;
             gridHelper.position.y = box.min.y - 0.01;
         }
 
         function loadModel(url) {
-            statusMsg.textContent = '⏳ Loading...';
+            statusMsg.innerHTML = '⏳ Loading <span style="color:#888;">' + url.split('/').pop() + '</span>...';
             const loader = new GLTFLoader();
             loader.load(
                 url,
                 (gltf) => {
                     statusMsg.style.display = 'none';
-                    titleEl.textContent = `📐 ${url.split('/').pop().replace('.glb','')}`;
+                    const name = url.split('/').pop().replace('.glb','');
+                    titleEl.textContent = `📐 ${name}`;
                     if (modelGroup) {
                         scene.remove(modelGroup);
                     }
                     modelGroup = gltf.scene;
-                    // Enable shadows on all meshes
                     modelGroup.traverse((node) => {
                         if (node.isMesh) {
                             node.castShadow = true;
@@ -251,21 +275,30 @@
                         }
                     });
                     scene.add(modelGroup);
-
-                    // Compute bounding box
-                    const box = new THREE.Box3().setFromObject(modelGroup);
-                    fitCameraToModel(box);
-
-                    // Set outline pass to use the model
+                    fitCameraToGroup(modelGroup);
                     outlinePass.selectedObjects = [modelGroup];
                     modelLoaded = true;
-                    console.log('✅ Model loaded and shadows enabled.');
+                    console.log('✅ Model loaded:', url);
                 },
                 undefined,
                 (err) => {
-                    statusMsg.style.display = 'block';
-                    statusMsg.textContent = `❌ Failed to load: ${url}`;
-                    console.error(err);
+                    console.error('❌ Model load failed:', err);
+                    statusMsg.innerHTML = `
+                        ❌ Failed to load: <span style="color:#ff6b6b;">${url}</span><br>
+                        <span style="color:#888;font-size:0.8rem;">Loading fallback box instead...</span>
+                    `;
+                    // Load fallback
+                    if (modelGroup) scene.remove(modelGroup);
+                    modelGroup = createFallbackBox();
+                    scene.add(modelGroup);
+                    fitCameraToGroup(modelGroup);
+                    outlinePass.selectedObjects = [modelGroup];
+                    modelLoaded = true;
+                    titleEl.textContent = '📐 Fallback (Model not found)';
+                    // After 2s, hide status
+                    setTimeout(() => {
+                        statusMsg.style.display = 'none';
+                    }, 2000);
                 }
             );
         }
@@ -273,8 +306,17 @@
         if (modelFile) {
             loadModel(modelFile);
         } else {
-            statusMsg.style.display = 'block';
-            statusMsg.innerHTML = '👈 No model selected. Click "Back to Library" to choose one.';
+            // No model specified – show fallback
+            statusMsg.innerHTML = '👈 No model selected. Loading fallback box...';
+            modelGroup = createFallbackBox();
+            scene.add(modelGroup);
+            fitCameraToGroup(modelGroup);
+            outlinePass.selectedObjects = [modelGroup];
+            modelLoaded = true;
+            titleEl.textContent = '📐 Fallback (No model)';
+            setTimeout(() => {
+                statusMsg.style.display = 'none';
+            }, 1500);
         }
 
         // --- Controls ---
@@ -338,8 +380,7 @@
 
         resetViewBtn.addEventListener('click', () => {
             if (modelGroup) {
-                const box = new THREE.Box3().setFromObject(modelGroup);
-                fitCameraToModel(box);
+                fitCameraToGroup(modelGroup);
             }
         });
 
@@ -397,7 +438,6 @@
         }
         animate();
 
-        // For debugging
         window.THREE_VIEWER = { scene, camera, renderer, controls, mainLight, outlinePass, ambientLight };
     </script>
 </body>
