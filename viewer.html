@@ -78,13 +78,17 @@
             <input type="checkbox" id="sunToggle" checked>
             <label for="sunToggle">☀️ Sun On/Off</label>
         </div>
+        <div class="checkbox-group">
+            <input type="checkbox" id="wireframeToggle">
+            <label for="wireframeToggle">🔲 Wireframe Overlay</label>
+        </div>
         <div class="control-group">
             <label>🔆 Brightness <span id="exposureValue">1.00</span></label>
             <input type="range" id="exposureSlider" min="0.2" max="2.5" step="0.01" value="1.0">
         </div>
         <div class="control-group">
-            <label>💡 Ambient Light <span id="ambientValue">0.50</span></label>
-            <input type="range" id="ambientSlider" min="0" max="10" step="0.1" value="0.5">
+            <label>💡 Ambient Light <span id="ambientValue">1.00</span></label>
+            <input type="range" id="ambientSlider" min="0" max="10" step="0.1" value="1.0">
         </div>
         <div class="control-group">
             <label>🌓 Shadow Intensity <span id="shadowValue">1.00</span></label>
@@ -144,13 +148,14 @@
         const edgeVal = document.getElementById('edgeValue');
         const autoRotateCheck = document.getElementById('autoRotateCheck');
         const sunToggle = document.getElementById('sunToggle');
+        const wireframeToggle = document.getElementById('wireframeToggle');
         const resetViewBtn = document.getElementById('resetViewBtn');
         const resetAllBtn = document.getElementById('resetAllBtn');
 
         // --- Three.js setup ---
         const container = document.getElementById('canvasContainer');
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x111111);
+        scene.background = new THREE.Color(0x1a1a1a);
 
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(5, 5, 10);
@@ -170,9 +175,15 @@
         controls.update();
 
         // --- Lights ---
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        // Ambient light (affects all surfaces)
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
         scene.add(ambientLight);
 
+        // Hemisphere light for fill from above/below
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x404060, 0.6);
+        scene.add(hemiLight);
+
+        // Main directional light (sun)
         const mainLight = new THREE.DirectionalLight(0xffffff, 1.0);
         mainLight.position.set(5, 10, 7);
         mainLight.castShadow = true;
@@ -187,11 +198,7 @@
         mainLight.shadow.bias = -0.001;
         scene.add(mainLight);
 
-        const fillLight = new THREE.DirectionalLight(0x446688, 0.2);
-        fillLight.position.set(-5, -2, 5);
-        scene.add(fillLight);
-
-        // --- Ground plane (shadow receiver) with adjustable opacity ---
+        // --- Ground plane (shadow receiver) ---
         const groundGeo = new THREE.PlaneGeometry(20, 20);
         const groundMat = new THREE.MeshStandardMaterial({
             color: 0x222222,
@@ -207,7 +214,6 @@
         ground.receiveShadow = true;
         scene.add(ground);
 
-        // Grid helper
         const gridHelper = new THREE.GridHelper(20, 20, 0x666666, 0x333333);
         gridHelper.position.set(0, -0.01, 0);
         scene.add(gridHelper);
@@ -234,6 +240,7 @@
         let modelFile = urlParams.get('model');
 
         let modelGroup = null;
+        let wireframeGroup = null;
 
         function repositionGroundAndGrid(box) {
             const centerX = (box.min.x + box.max.x) / 2;
@@ -266,12 +273,33 @@
                     if (modelGroup) {
                         scene.remove(modelGroup);
                     }
+                    if (wireframeGroup) {
+                        scene.remove(wireframeGroup);
+                        wireframeGroup = null;
+                    }
                     modelGroup = gltf.scene;
+                    // Enable shadows and ensure materials are standard
                     modelGroup.traverse((node) => {
                         if (node.isMesh) {
                             node.castShadow = true;
                             node.receiveShadow = true;
-                            if (node.material) node.material.needsUpdate = true;
+                            if (node.material) {
+                                // Ensure material is responsive to lights
+                                if (node.material.isMeshStandardMaterial || node.material.isMeshPhongMaterial) {
+                                    node.material.needsUpdate = true;
+                                } else {
+                                    // Convert to standard material to respond to lights
+                                    const oldMat = node.material;
+                                    const newMat = new THREE.MeshStandardMaterial({
+                                        color: oldMat.color ? oldMat.color : 0xffffff,
+                                        map: oldMat.map || undefined,
+                                        roughness: oldMat.roughness !== undefined ? oldMat.roughness : 0.5,
+                                        metalness: oldMat.metalness !== undefined ? oldMat.metalness : 0.0,
+                                    });
+                                    node.material = newMat;
+                                    node.material.needsUpdate = true;
+                                }
+                            }
                         }
                     });
                     scene.add(modelGroup);
@@ -328,7 +356,7 @@
         ambientSlider.addEventListener('input', () => {
             const val = parseFloat(ambientSlider.value);
             ambientLight.intensity = val;
-            ambientVal.textContent = val.toFixed(1);
+            ambientVal.textContent = val.toFixed(2);
         });
 
         shadowSlider.addEventListener('input', () => {
@@ -366,6 +394,37 @@
             mainLight.visible = sunToggle.checked;
         });
 
+        // Wireframe toggle – adds a wireframe overlay on the model
+        wireframeToggle.addEventListener('change', () => {
+            if (!modelGroup) return;
+            if (wireframeToggle.checked) {
+                if (!wireframeGroup) {
+                    wireframeGroup = new THREE.Group();
+                    modelGroup.traverse((node) => {
+                        if (node.isMesh) {
+                            const wireframeMat = new THREE.MeshBasicMaterial({
+                                color: 0xffffff,
+                                wireframe: true,
+                                transparent: true,
+                                opacity: 0.3,
+                            });
+                            const wireframeMesh = new THREE.Mesh(node.geometry.clone(), wireframeMat);
+                            wireframeMesh.position.copy(node.position);
+                            wireframeMesh.rotation.copy(node.rotation);
+                            wireframeMesh.scale.copy(node.scale);
+                            wireframeGroup.add(wireframeMesh);
+                        }
+                    });
+                    scene.add(wireframeGroup);
+                }
+            } else {
+                if (wireframeGroup) {
+                    scene.remove(wireframeGroup);
+                    wireframeGroup = null;
+                }
+            }
+        });
+
         resetViewBtn.addEventListener('click', () => {
             if (modelGroup) {
                 fitCameraToGroup(modelGroup);
@@ -377,9 +436,9 @@
             exposureVal.textContent = '1.00';
             renderer.toneMappingExposure = 1.0;
 
-            ambientSlider.value = '0.5';
-            ambientVal.textContent = '0.5';
-            ambientLight.intensity = 0.5;
+            ambientSlider.value = '1.0';
+            ambientVal.textContent = '1.00';
+            ambientLight.intensity = 1.0;
 
             shadowSlider.value = '1.0';
             shadowVal.textContent = '1.00';
@@ -402,6 +461,12 @@
 
             sunToggle.checked = true;
             mainLight.visible = true;
+
+            wireframeToggle.checked = false;
+            if (wireframeGroup) {
+                scene.remove(wireframeGroup);
+                wireframeGroup = null;
+            }
 
             resetViewBtn.click();
         });
@@ -428,7 +493,6 @@
         }
         animate();
 
-        // Expose for debugging
         window.THREE_VIEWER = { scene, camera, renderer, controls, mainLight, outlinePass, ambientLight, ground };
     </script>
 </body>
