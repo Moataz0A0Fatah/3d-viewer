@@ -13,7 +13,7 @@
             position: absolute; bottom: 30px; right: 30px; z-index: 10;
             background: rgba(20,20,20,0.92); backdrop-filter: blur(8px);
             padding: 18px 22px; border-radius: 16px; border: 1px solid #444;
-            display: flex; flex-direction: column; gap: 12px; min-width: 210px;
+            display: flex; flex-direction: column; gap: 12px; min-width: 220px;
             max-height: 80vh; overflow-y: auto;
             box-shadow: 0 4px 30px rgba(0,0,0,0.8);
         }
@@ -58,7 +58,6 @@
         .status-msg .error { color: #ff6b6b; }
         .status-msg .small { font-size: 0.8rem; color: #666; }
 
-        /* Measure label (top-left overlay) */
         .measure-label {
             position: absolute; top: 80px; left: 20px; z-index: 20;
             background: rgba(0,0,0,0.7); color: #4caf50;
@@ -84,6 +83,9 @@
         .section-controls .row input[type="range"] {
             flex: 1;
         }
+        .section-controls .row input[type="checkbox"] {
+            margin-right: 2px;
+        }
 
         @media (max-width: 600px) {
             .controls-panel { bottom: 15px; right: 15px; padding: 12px 16px; min-width: 170px; max-height: 60vh; gap: 8px; }
@@ -97,11 +99,10 @@
     <a href="index.html" class="back-btn">← Back to Library</a>
     <div class="model-title" id="modelTitle">Loading...</div>
     <div class="status-msg" id="statusMsg">⏳ Loading model...</div>
-
-    <div class="measure-label" id="measureLabel">📏 0.00 m</div>
+    <div class="measure-label" id="measureLabel">📏 0.000 m</div>
 
     <div class="controls-panel">
-        <!-- Existing controls -->
+        <!-- Standard controls -->
         <div class="checkbox-group">
             <input type="checkbox" id="autoRotateCheck">
             <label for="autoRotateCheck">🔄 Auto-Rotate</label>
@@ -109,6 +110,10 @@
         <div class="checkbox-group">
             <input type="checkbox" id="sunToggle" checked>
             <label for="sunToggle">☀️ Sun On/Off</label>
+        </div>
+        <div class="checkbox-group">
+            <input type="checkbox" id="showBoxCheck" checked>
+            <label for="showBoxCheck">📦 Bounding Box</label>
         </div>
         <div class="control-group">
             <label>🔆 Brightness <span id="exposureValue">1.00</span></label>
@@ -132,29 +137,29 @@
             <input type="range" id="fillElevationSlider" min="0" max="90" step="1" value="45">
         </div>
 
-        <!-- Measure button -->
-        <button class="action-btn" id="measureBtn">📏 Measure (click 2 points)</button>
+        <!-- Measure -->
+        <button class="action-btn" id="measureBtn">📏 Measure (snap to vertex)</button>
 
-        <!-- Section slices -->
+        <!-- Section slices with percentage -->
         <div class="section-controls">
-            <div style="color:#aaa; font-size:0.75rem; margin-bottom:4px;">✂️ Section Slices</div>
+            <div style="color:#aaa; font-size:0.75rem; margin-bottom:4px;">✂️ Section Slices (%)</div>
             <div class="row">
                 <input type="checkbox" id="clipX">
                 <label style="width:auto; color:#ff6b6b;">X</label>
-                <input type="range" id="clipXSlider" min="-5" max="5" step="0.01" value="0">
-                <span id="clipXVal" style="color:#888;font-size:0.7rem;width:30px;">0.00</span>
+                <input type="range" id="clipXSlider" min="0" max="100" step="0.5" value="50">
+                <span id="clipXVal" style="color:#888;font-size:0.7rem;width:36px;">50%</span>
             </div>
             <div class="row">
                 <input type="checkbox" id="clipY">
                 <label style="width:auto; color:#4caf50;">Y</label>
-                <input type="range" id="clipYSlider" min="-5" max="5" step="0.01" value="0">
-                <span id="clipYVal" style="color:#888;font-size:0.7rem;width:30px;">0.00</span>
+                <input type="range" id="clipYSlider" min="0" max="100" step="0.5" value="50">
+                <span id="clipYVal" style="color:#888;font-size:0.7rem;width:36px;">50%</span>
             </div>
             <div class="row">
                 <input type="checkbox" id="clipZ">
                 <label style="width:auto; color:#4a9eff;">Z</label>
-                <input type="range" id="clipZSlider" min="-5" max="5" step="0.01" value="0">
-                <span id="clipZVal" style="color:#888;font-size:0.7rem;width:30px;">0.00</span>
+                <input type="range" id="clipZSlider" min="0" max="100" step="0.5" value="50">
+                <span id="clipZVal" style="color:#888;font-size:0.7rem;width:36px;">50%</span>
             </div>
         </div>
 
@@ -195,6 +200,7 @@
         const fillElevationVal = document.getElementById('fillElevationValue');
         const autoRotateCheck = document.getElementById('autoRotateCheck');
         const sunToggle = document.getElementById('sunToggle');
+        const showBoxCheck = document.getElementById('showBoxCheck');
         const resetViewBtn = document.getElementById('resetViewBtn');
         const resetAllBtn = document.getElementById('resetAllBtn');
         const measureBtn = document.getElementById('measureBtn');
@@ -223,7 +229,6 @@
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.toneMappingExposure = 1.0;
-        // Enable local clipping
         renderer.localClippingEnabled = true;
         container.appendChild(renderer.domElement);
 
@@ -259,7 +264,7 @@
         fillLight.position.set(-5, 5, 5);
         scene.add(fillLight);
 
-        // --- Ground plane ---
+        // --- Ground ---
         const groundGeo = new THREE.PlaneGeometry(20, 20);
         const groundMat = new THREE.ShadowMaterial({
             opacity: 0.2,
@@ -271,21 +276,43 @@
         ground.receiveShadow = true;
         scene.add(ground);
 
+        // --- Bounding box helper ---
+        let boxHelper = null;
+        let modelBox = new THREE.Box3();
+        let modelGroup = null;
+        let modelMeshes = [];
+
         // --- Clipping planes ---
         const clipPlanes = {
             x: new THREE.Plane(new THREE.Vector3(1, 0, 0), 0),
             y: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
             z: new THREE.Plane(new THREE.Vector3(0, 0, 1), 0),
         };
-        // We'll store active planes in an array
         let activeClipPlanes = [];
 
-        // --- Model loading ---
-        const urlParams = new URLSearchParams(window.location.search);
-        let modelFile = urlParams.get('model');
+        // --- Vertex cache for snapping ---
+        let allVertices = [];
 
-        let modelGroup = null;
+        function buildVertexCache(group) {
+            const positions = [];
+            group.traverse((node) => {
+                if (node.isMesh) {
+                    const geo = node.geometry;
+                    if (geo.attributes.position) {
+                        const pos = geo.attributes.position;
+                        for (let i = 0; i < pos.count; i++) {
+                            const p = new THREE.Vector3();
+                            p.fromBufferAttribute(pos, i);
+                            p.applyMatrix4(node.matrixWorld);
+                            positions.push(p);
+                        }
+                    }
+                }
+            });
+            allVertices = positions;
+        }
 
+        // --- Helper functions ---
         function repositionGround(box) {
             const centerX = (box.min.x + box.max.x) / 2;
             const centerZ = (box.min.z + box.max.z) / 2;
@@ -295,6 +322,7 @@
 
         function fitCameraToGroup(group) {
             const box = new THREE.Box3().setFromObject(group);
+            modelBox.copy(box);
             const size = box.max.sub(box.min);
             const maxDim = Math.max(size.x, size.y, size.z);
             const distance = maxDim * 1.8;
@@ -302,30 +330,55 @@
             controls.target.copy(box.center);
             controls.update();
             repositionGround(box);
-            // Update slider ranges based on bounding box
-            const ext = size.length() / 2 + 0.5;
-            clipXSlider.min = -ext;
-            clipXSlider.max = ext;
-            clipYSlider.min = -ext;
-            clipYSlider.max = ext;
-            clipZSlider.min = -ext;
-            clipZSlider.max = ext;
-            clipXSlider.value = 0;
-            clipYSlider.value = 0;
-            clipZSlider.value = 0;
-            clipXVal.textContent = '0.00';
-            clipYVal.textContent = '0.00';
-            clipZVal.textContent = '0.00';
+            // Update clipping slider ranges (percentage)
+            // They are now 0-100, no need to change range.
+            // Reset clipping positions to 50%
+            clipXSlider.value = 50;
+            clipYSlider.value = 50;
+            clipZSlider.value = 50;
+            clipXVal.textContent = '50%';
+            clipYVal.textContent = '50%';
+            clipZVal.textContent = '50%';
+            // Update bounding box
+            updateBoundingBox();
+            // Build vertex cache for measure snap
+            if (modelGroup) buildVertexCache(modelGroup);
         }
 
+        function updateBoundingBox() {
+            if (boxHelper) {
+                scene.remove(boxHelper);
+                boxHelper = null;
+            }
+            if (!modelGroup) return;
+            if (showBoxCheck.checked) {
+                boxHelper = new THREE.BoxHelper(modelGroup, 0x4caf50);
+                scene.add(boxHelper);
+            }
+        }
+
+        // --- Clipping update with percentage ---
         function updateClipping() {
-            // Collect active planes
             const planes = [];
-            if (clipX.checked) planes.push(clipPlanes.x);
-            if (clipY.checked) planes.push(clipPlanes.y);
-            if (clipZ.checked) planes.push(clipPlanes.z);
+            if (clipX.checked) {
+                const pct = parseFloat(clipXSlider.value) / 100;
+                const pos = modelBox.min.x + pct * (modelBox.max.x - modelBox.min.x);
+                clipPlanes.x.constant = pos;
+                planes.push(clipPlanes.x);
+            }
+            if (clipY.checked) {
+                const pct = parseFloat(clipYSlider.value) / 100;
+                const pos = modelBox.min.y + pct * (modelBox.max.y - modelBox.min.y);
+                clipPlanes.y.constant = pos;
+                planes.push(clipPlanes.y);
+            }
+            if (clipZ.checked) {
+                const pct = parseFloat(clipZSlider.value) / 100;
+                const pos = modelBox.min.z + pct * (modelBox.max.z - modelBox.min.z);
+                clipPlanes.z.constant = pos;
+                planes.push(clipPlanes.z);
+            }
             activeClipPlanes = planes;
-            // Apply to model materials
             if (modelGroup) {
                 modelGroup.traverse((node) => {
                     if (node.isMesh) {
@@ -345,6 +398,80 @@
             }
         }
 
+        // --- Measure tool with snap to nearest vertex ---
+        let measurePoints = [];
+        let measureLine = null;
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
+
+        function getNearestVertex(point, threshold = 0.05) {
+            let best = null;
+            let bestDist = threshold;
+            for (const v of allVertices) {
+                const d = point.distanceTo(v);
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = v.clone();
+                }
+            }
+            return best;
+        }
+
+        function getIntersection(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            raycaster.setFromCamera(pointer, camera);
+            const meshes = [];
+            if (modelGroup) {
+                modelGroup.traverse((node) => {
+                    if (node.isMesh) meshes.push(node);
+                });
+            }
+            const intersects = raycaster.intersectObjects(meshes);
+            if (intersects.length > 0) {
+                const pt = intersects[0].point;
+                // Snap to nearest vertex
+                const snapped = getNearestVertex(pt);
+                return snapped || pt;
+            }
+            return null;
+        }
+
+        function createMeasureLine(p1, p2) {
+            if (measureLine) {
+                scene.remove(measureLine);
+                measureLine = null;
+            }
+            const points = [p1, p2];
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const material = new THREE.LineBasicMaterial({
+                color: 0x4caf50,
+                linewidth: 2,
+            });
+            const line = new THREE.Line(geometry, material);
+            const sphereGeo = new THREE.SphereGeometry(0.04, 8, 8);
+            const sphereMat = new THREE.MeshBasicMaterial({ color: 0x4caf50 });
+            const s1 = new THREE.Mesh(sphereGeo, sphereMat);
+            s1.position.copy(p1);
+            const s2 = new THREE.Mesh(sphereGeo, sphereMat);
+            s2.position.copy(p2);
+            const group = new THREE.Group();
+            group.add(line);
+            group.add(s1);
+            group.add(s2);
+            measureLine = group;
+            scene.add(group);
+            const dist = p1.distanceTo(p2);
+            measureLabel.textContent = `📏 ${dist.toFixed(3)} m`;
+            measureLabel.classList.add('active');
+            return dist;
+        }
+
+        // --- Model loading ---
+        const urlParams = new URLSearchParams(window.location.search);
+        let modelFile = urlParams.get('model');
+
         function loadModel(url) {
             const fileName = url.split('/').pop();
             statusMsg.innerHTML = `⏳ Loading <span style="color:#888;">${fileName}</span>...<br><span class="small">${url}</span>`;
@@ -356,6 +483,7 @@
                     titleEl.textContent = `📐 ${fileName.replace(/\.glb$/i,'')}`;
                     if (modelGroup) {
                         scene.remove(modelGroup);
+                        if (boxHelper) { scene.remove(boxHelper); boxHelper = null; }
                     }
                     modelGroup = gltf.scene;
                     // Convert materials and enable clipping
@@ -382,8 +510,11 @@
                     });
                     scene.add(modelGroup);
                     fitCameraToGroup(modelGroup);
-                    // Apply clipping if any checkboxes are active
                     updateClipping();
+                    // Build vertex cache
+                    buildVertexCache(modelGroup);
+                    // Show bounding box
+                    updateBoundingBox();
                     console.log('✅ Model loaded:', url);
                 },
                 undefined,
@@ -412,7 +543,6 @@
         }
 
         // --- Controls ---
-
         function updateSunDirection(time) {
             const t = (time - 6) / 12;
             const azimuthDeg = 90 + t * 180;
@@ -439,7 +569,6 @@
             fillLight.target.updateMatrixWorld();
         }
 
-        // Brightness (exposure)
         exposureSlider.addEventListener('input', () => {
             const val = parseFloat(exposureSlider.value);
             renderer.toneMappingExposure = val;
@@ -483,6 +612,8 @@
             sunLight.visible = sunToggle.checked;
         });
 
+        showBoxCheck.addEventListener('change', updateBoundingBox);
+
         resetViewBtn.addEventListener('click', () => {
             if (modelGroup) {
                 fitCameraToGroup(modelGroup);
@@ -517,128 +648,69 @@
             clipX.checked = false;
             clipY.checked = false;
             clipZ.checked = false;
-            clipXSlider.value = 0;
-            clipYSlider.value = 0;
-            clipZSlider.value = 0;
-            clipXVal.textContent = '0.00';
-            clipYVal.textContent = '0.00';
-            clipZVal.textContent = '0.00';
+            clipXSlider.value = 50;
+            clipYSlider.value = 50;
+            clipZSlider.value = 50;
+            clipXVal.textContent = '50%';
+            clipYVal.textContent = '50%';
+            clipZVal.textContent = '50%';
             updateClipping();
-            // Remove measure line
+
+            // Reset measure
             if (measureLine) {
                 scene.remove(measureLine);
                 measureLine = null;
             }
             measureLabel.classList.remove('active');
 
+            showBoxCheck.checked = true;
+            updateBoundingBox();
+
             resetViewBtn.click();
         });
 
-        // --- Clipping controls ---
+        // --- Clipping percentage sliders ---
         clipX.addEventListener('change', updateClipping);
         clipY.addEventListener('change', updateClipping);
         clipZ.addEventListener('change', updateClipping);
 
         clipXSlider.addEventListener('input', () => {
             const val = parseFloat(clipXSlider.value);
-            clipXVal.textContent = val.toFixed(2);
-            clipPlanes.x.constant = val;
+            clipXVal.textContent = `${Math.round(val)}%`;
             if (clipX.checked) updateClipping();
         });
         clipYSlider.addEventListener('input', () => {
             const val = parseFloat(clipYSlider.value);
-            clipYVal.textContent = val.toFixed(2);
-            clipPlanes.y.constant = val;
+            clipYVal.textContent = `${Math.round(val)}%`;
             if (clipY.checked) updateClipping();
         });
         clipZSlider.addEventListener('input', () => {
             const val = parseFloat(clipZSlider.value);
-            clipZVal.textContent = val.toFixed(2);
-            clipPlanes.z.constant = val;
+            clipZVal.textContent = `${Math.round(val)}%`;
             if (clipZ.checked) updateClipping();
         });
 
         // --- Measure tool ---
-        let measurePoints = [];
-        let measureLine = null;
-        const raycaster = new THREE.Raycaster();
-        const pointer = new THREE.Vector2();
-
-        function getIntersection(event) {
-            const rect = renderer.domElement.getBoundingClientRect();
-            pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-            pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-            raycaster.setFromCamera(pointer, camera);
-            // Check against model group
-            if (!modelGroup) return null;
-            const meshes = [];
-            modelGroup.traverse((node) => {
-                if (node.isMesh) meshes.push(node);
-            });
-            const intersects = raycaster.intersectObjects(meshes);
-            if (intersects.length > 0) {
-                return intersects[0].point;
-            }
-            return null;
-        }
-
-        function createMeasureLine(p1, p2) {
-            if (measureLine) {
-                scene.remove(measureLine);
-                measureLine = null;
-            }
-            const points = [p1, p2];
-            const geometry = new THREE.BufferGeometry().setFromPoints(points);
-            const material = new THREE.LineBasicMaterial({
-                color: 0x4caf50,
-                linewidth: 2,
-            });
-            const line = new THREE.Line(geometry, material);
-            // Also add small spheres at endpoints
-            const sphereGeo = new THREE.SphereGeometry(0.05, 8, 8);
-            const sphereMat = new THREE.MeshBasicMaterial({ color: 0x4caf50 });
-            const s1 = new THREE.Mesh(sphereGeo, sphereMat);
-            s1.position.copy(p1);
-            const s2 = new THREE.Mesh(sphereGeo, sphereMat);
-            s2.position.copy(p2);
-            const group = new THREE.Group();
-            group.add(line);
-            group.add(s1);
-            group.add(s2);
-            measureLine = group;
-            scene.add(group);
-            // Show distance
-            const dist = p1.distanceTo(p2);
-            measureLabel.textContent = `📏 ${dist.toFixed(3)} m`;
-            measureLabel.classList.add('active');
-        }
-
         measureBtn.addEventListener('click', () => {
-            if (!modelGroup) {
+            if (!modelGroup || allVertices.length === 0) {
                 alert('Please load a model first.');
                 return;
             }
-            // Switch to measure mode: click two points
             measurePoints = [];
-            measureLabel.textContent = '📏 Click first point on model';
+            measureLabel.textContent = '📏 Click first point (snaps to vertex)';
             measureLabel.classList.add('active');
-            // Remove old line
             if (measureLine) {
                 scene.remove(measureLine);
                 measureLine = null;
             }
-            // Use a temporary click handler
             const onClick = (event) => {
                 const point = getIntersection(event);
                 if (!point) return;
                 measurePoints.push(point.clone());
                 if (measurePoints.length === 1) {
-                    measureLabel.textContent = '📏 Click second point on model';
+                    measureLabel.textContent = '📏 Click second point (snaps to vertex)';
                 } else if (measurePoints.length === 2) {
-                    // Create line
                     createMeasureLine(measurePoints[0], measurePoints[1]);
-                    measureLabel.textContent = `📏 ${measurePoints[0].distanceTo(measurePoints[1]).toFixed(3)} m`;
-                    // Remove handler
                     renderer.domElement.removeEventListener('click', onClick);
                 }
             };
@@ -667,7 +739,7 @@
         }
         animate();
 
-        window.THREE_VIEWER = { scene, camera, renderer, controls, sunLight, fillLight, hemiLight, ambientLight, clipPlanes };
+        window.THREE_VIEWER = { scene, camera, renderer, controls, sunLight, fillLight, modelGroup, boxHelper };
     </script>
 </body>
 </html>
