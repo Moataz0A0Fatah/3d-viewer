@@ -9,6 +9,13 @@ export default defineConfig({
   },
   build: {
     outDir: 'docs',
-    assetsDir: 'assets'
+    assetsDir: 'assets',
+    // Optimize images during build
+    assetsInlineLimit: 4096,
+    rollupOptions: {
+      output: {
+        manualChunks: undefined
+      }
+    }
   }
 });
