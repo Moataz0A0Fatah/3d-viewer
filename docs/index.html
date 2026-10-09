@@ -4,8 +4,8 @@
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>3D Viewer</title>
-		<script type="module" crossorigin src="/3d-viewer/assets/index-D5i0jkWa.js"></script>
-		<link rel="stylesheet" crossorigin href="/3d-viewer/assets/index-BuzLaQm8.css">
+		<script type="module" crossorigin src="/3d-viewer/assets/index-C4Yi82lx.js"></script>
+		<link rel="stylesheet" crossorigin href="/3d-viewer/assets/index-CqFUQXsI.css">
 	</head>
 	<body>
 		<div id="toast" class="toast"></div>
@@ -32,6 +32,7 @@
 				<div class="tools">
 					<button id="btn-measure">📏 Measure</button>
 					<button id="btn-clear">✕ Clear</button>
+					<button id="btn-grid">▦ Grid</button>
 					<button id="btn-lights">💡 Lights</button>
 					<button id="btn-debug">🔴 Corners</button>
 				</div>
@@ -40,7 +41,16 @@
 			<main>
 				<div id="viewport"></div>
 
-				<aside id="lights-panel" class="panel hidden">
+				<!-- OBJECT INFO PANEL (LEFT) -->
+				<aside id="info-panel" class="panel panel-left">
+					<h2>Object Info</h2>
+					<div id="info-content">
+						<p class="hint">Click an object in the model to see its name.</p>
+					</div>
+				</aside>
+
+				<!-- LIGHTS PANEL (RIGHT) -->
+				<aside id="lights-panel" class="panel panel-right hidden">
 					<div class="panel-header">
 						<h2>Lighting</h2>
 						<button id="btn-close-lights">✕</button>
@@ -138,13 +148,6 @@
 						<div class="light-section" style="margin-top: 0.6rem;">
 							<button id="btn-reset-lights" class="wide-btn">Reset all lights</button>
 						</div>
-					</div>
-				</aside>
-
-				<aside id="info-panel" class="panel">
-					<h2>Object Info</h2>
-					<div id="info-content">
-						<p class="hint">Click an object in the model to see its name.</p>
 					</div>
 				</aside>
 			</main>

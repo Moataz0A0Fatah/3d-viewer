@@ -62,7 +62,6 @@ async function fileExists(url: string): Promise<boolean> {
 }
 
 // ============ SELECTOR ============
-// ============ SELECTOR ============
 const PLACEHOLDER_URL = import.meta.env.BASE_URL + 'placeholder.png';
 
 function buildSelector() {
@@ -99,6 +98,8 @@ let loader: GLTFLoader;
 let raycaster: THREE.Raycaster;
 let mouse: THREE.Vector2;
 let lighting: LightingController;
+let gridHelper: THREE.GridHelper;
+let gridVisible = true;
 
 let measureMode = false;
 let measurePoints: THREE.Vector3[] = [];
@@ -140,7 +141,8 @@ function initViewer() {
 
   lighting = new LightingController(scene);
 
-  scene.add(new THREE.GridHelper(200, 200, 0xcbd5e1, 0xe2e8f0));
+  gridHelper = new THREE.GridHelper(200, 200, 0xcbd5e1, 0xe2e8f0);
+  scene.add(gridHelper);
 
   modelRoot = new THREE.Group();
   scene.add(modelRoot);
@@ -645,6 +647,7 @@ function wireLightsPanel() {
 const btnBack = document.getElementById('btn-back')!;
 const btnMeasure = document.getElementById('btn-measure')!;
 const btnClear = document.getElementById('btn-clear')!;
+const btnGrid = document.getElementById('btn-grid')!;
 const btnDebug = document.getElementById('btn-debug')!;
 
 btnBack.addEventListener('click', () => {
@@ -669,6 +672,14 @@ btnMeasure.addEventListener('click', () => {
 });
 
 btnClear.addEventListener('click', clearMeasurements);
+
+btnGrid.addEventListener('click', () => {
+  if (!gridHelper) return;
+  gridVisible = !gridVisible;
+  gridHelper.visible = gridVisible;
+  btnGrid.classList.toggle('active', !gridVisible);
+  showToast(gridVisible ? 'Grid ON' : 'Grid OFF', 'info');
+});
 
 btnDebug.addEventListener('click', toggleDebugCorners);
 
