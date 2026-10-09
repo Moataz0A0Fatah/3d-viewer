@@ -19,6 +19,7 @@ const viewport = document.getElementById('viewport')!;
 const infoContent = document.getElementById('info-content')!;
 const toastEl = document.getElementById('toast')!;
 
+// Lights
 const lightsPanel = document.getElementById('lights-panel')!;
 const btnLights = document.getElementById('btn-lights')!;
 const btnCloseLights = document.getElementById('btn-close-lights')!;
@@ -33,6 +34,16 @@ const btnAddLight = document.getElementById('btn-add-light')!;
 const extraLightsList = document.getElementById('extra-lights-list')!;
 const chkShadows = document.getElementById('chk-shadows') as HTMLInputElement;
 const btnResetLights = document.getElementById('btn-reset-lights')!;
+
+// Section
+const sectionPanel = document.getElementById('section-panel')!;
+const btnSection = document.getElementById('btn-section')!;
+const btnCloseSection = document.getElementById('btn-close-section')!;
+const chkSection = document.getElementById('chk-section') as HTMLInputElement;
+const sliderSection = document.getElementById('slider-section') as HTMLInputElement;
+const valSection = document.getElementById('val-section')!;
+const btnFlipSection = document.getElementById('btn-flip-section')!;
+const btnResetSection = document.getElementById('btn-reset-section')!;
 
 // ============ TOAST ============
 let toastTimeout: number | undefined;
@@ -115,6 +126,14 @@ const ALLOW_VERTEX_FALLBACK = true;
 let debugCornersOn = false;
 let debugDotGroup: THREE.Group | null = null;
 
+// ============ SECTION STATE ============
+let sectionEnabled = false;
+let sectionAxis: 'x' | 'y' | 'z' = 'x';
+let sectionFlipped = false;
+let sectionPosition = 0;
+const clipPlane = new THREE.Plane(new THREE.Vector3(1, 0, 0), 0);
+let modelBounds: THREE.Box3 | null = null;
+
 // ============ INIT ============
 function initViewer() {
   scene = new THREE.Scene();
@@ -133,6 +152,7 @@ function initViewer() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.localClippingEnabled = true; // ⬅️ REQUIRED for section
   viewport.appendChild(renderer.domElement);
 
   controls = new OrbitControls(camera, renderer.domElement);
@@ -254,6 +274,7 @@ async function openTopic(topic: Topic) {
         modelRoot.add(model);
 
         const box = new THREE.Box3().setFromObject(model);
+        modelBounds = box.clone();
         const center = box.getCenter(new THREE.Vector3());
         const size = box.getSize(new THREE.Vector3());
         const maxDim = Math.max(size.x, size.y, size.z);
@@ -277,6 +298,10 @@ async function openTopic(topic: Topic) {
         lighting.main.shadow.camera.bottom = -half;
         lighting.main.shadow.camera.far = maxDim * 10;
         lighting.main.shadow.camera.updateProjectionMatrix();
+
+        // Reapply section (in case it's on)
+        updateSectionSliderRange();
+        applySection();
 
         if (debugCornersOn) {
           debugCornersOn = false;
@@ -530,6 +555,123 @@ function toggleDebugCorners() {
   console.log(`[DEBUG] Total corners detected: ${totalCorners}`);
 }
 
+// ============ SECTION LOGIC ============
+function updateSectionPlane() {
+  const n = new THREE.Vector3(0, 0, 0);
+  if (sectionAxis === 'x') n.set(1, 0, 0);
+  else if (sectionAxis === 'y') n.set(0, 1, 0);
+  else n.set(0, 0, 1);
+
+  if (sectionFlipped) n.negate();
+
+  clipPlane.normal.copy(n);
+  clipPlane.constant = -sectionPosition;
+}
+
+function applySection() {
+  if (!modelRoot) return;
+
+  modelRoot.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh) return;
+
+    const materials = Array.isArray(mesh.material)
+      ? mesh.material
+      : [mesh.material];
+
+    for (const mat of materials) {
+      if (!mat) continue;
+
+      if (sectionEnabled) {
+        (mat as THREE.MeshStandardMaterial).clippingPlanes = [clipPlane];
+        (mat as THREE.MeshStandardMaterial).clipShadows = true;
+        (mat as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+      } else {
+        (mat as THREE.MeshStandardMaterial).clippingPlanes = [];
+        (mat as THREE.MeshStandardMaterial).clipShadows = false;
+        (mat as THREE.MeshStandardMaterial).side = THREE.FrontSide;
+      }
+      (mat as THREE.Material).needsUpdate = true;
+    }
+  });
+}
+
+function updateSectionSliderRange() {
+  if (!modelBounds) return;
+
+  const min = modelBounds.min[sectionAxis];
+  const max = modelBounds.max[sectionAxis];
+  const span = max - min;
+
+  sliderSection.min = String(min);
+  sliderSection.max = String(max);
+  sliderSection.step = String(span / 200 || 0.1);
+  sectionPosition = (min + max) / 2;
+  sliderSection.value = String(sectionPosition);
+  valSection.textContent = sectionPosition.toFixed(2);
+
+  updateSectionPlane();
+}
+
+function resetSection() {
+  sectionAxis = 'x';
+  sectionFlipped = false;
+  sectionEnabled = false;
+  chkSection.checked = false;
+
+  document.querySelectorAll<HTMLButtonElement>('.axis-grid button').forEach((b) => {
+    b.classList.toggle('active', b.dataset.axis === 'x');
+  });
+
+  updateSectionSliderRange();
+  applySection();
+  showToast('Section reset', 'info');
+}
+
+function wireSectionPanel() {
+  btnSection.addEventListener('click', () => {
+    const opening = sectionPanel.classList.contains('hidden');
+    sectionPanel.classList.toggle('hidden');
+    if (opening) lightsPanel.classList.add('hidden');
+  });
+
+  btnCloseSection.addEventListener('click', () => {
+    sectionPanel.classList.add('hidden');
+  });
+
+  chkSection.addEventListener('change', () => {
+    sectionEnabled = chkSection.checked;
+    btnSection.classList.toggle('active', sectionEnabled);
+    applySection();
+    showToast(sectionEnabled ? 'Section ON' : 'Section OFF', 'info');
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('.axis-grid button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      sectionAxis = (btn.dataset.axis as 'x' | 'y' | 'z') || 'x';
+      document.querySelectorAll<HTMLButtonElement>('.axis-grid button').forEach((b) => {
+        b.classList.toggle('active', b === btn);
+      });
+      updateSectionSliderRange();
+      applySection();
+    });
+  });
+
+  sliderSection.addEventListener('input', () => {
+    sectionPosition = Number(sliderSection.value);
+    valSection.textContent = sectionPosition.toFixed(2);
+    updateSectionPlane();
+  });
+
+  btnFlipSection.addEventListener('click', () => {
+    sectionFlipped = !sectionFlipped;
+    updateSectionPlane();
+    showToast(sectionFlipped ? 'Direction flipped' : 'Direction normal', 'info');
+  });
+
+  btnResetSection.addEventListener('click', resetSection);
+}
+
 // ============ LIGHTS PANEL ============
 function renderExtraLights() {
   if (lighting.extras.length === 0) {
@@ -578,7 +720,9 @@ function renderExtraLights() {
 
 function wireLightsPanel() {
   btnLights.addEventListener('click', () => {
+    const opening = lightsPanel.classList.contains('hidden');
     lightsPanel.classList.toggle('hidden');
+    if (opening) sectionPanel.classList.add('hidden');
   });
 
   btnCloseLights.addEventListener('click', () => {
@@ -656,6 +800,7 @@ btnBack.addEventListener('click', () => {
   measureMode = false;
   btnMeasure.classList.remove('active');
   lightsPanel.classList.add('hidden');
+  sectionPanel.classList.add('hidden');
   viewerPage.classList.add('hidden');
   selectorPage.classList.remove('hidden');
 });
@@ -686,3 +831,4 @@ btnDebug.addEventListener('click', toggleDebugCorners);
 // ============ BOOT ============
 buildSelector();
 wireLightsPanel();
+wireSectionPanel();

@@ -4,8 +4,8 @@
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>3D Viewer</title>
-		<script type="module" crossorigin src="/3d-viewer/assets/index-DSz-JBqG.js"></script>
-		<link rel="stylesheet" crossorigin href="/3d-viewer/assets/index-CqFUQXsI.css">
+		<script type="module" crossorigin src="/3d-viewer/assets/index-BKt6XRRR.js"></script>
+		<link rel="stylesheet" crossorigin href="/3d-viewer/assets/index-t9nDieYZ.css">
 	</head>
 	<body>
 		<div id="toast" class="toast"></div>
@@ -33,6 +33,7 @@
 					<button id="btn-measure">📏 Measure</button>
 					<button id="btn-clear">✕ Clear</button>
 					<button id="btn-grid">▦ Grid</button>
+					<button id="btn-section">✂ Section</button>
 					<button id="btn-lights">💡 Lights</button>
 					<button id="btn-debug">🔴 Corners</button>
 				</div>
@@ -46,6 +47,56 @@
 					<h2>Object Info</h2>
 					<div id="info-content">
 						<p class="hint">Click an object in the model to see its name.</p>
+					</div>
+				</aside>
+
+				<!-- SECTION PANEL (RIGHT) -->
+				<aside id="section-panel" class="panel panel-right hidden">
+					<div class="panel-header">
+						<h2>Section</h2>
+						<button id="btn-close-section">✕</button>
+					</div>
+
+					<div id="section-content">
+						<div class="light-section">
+							<div class="light-row">
+								<label class="light-label">Enable Section</label>
+								<input type="checkbox" id="chk-section" />
+							</div>
+						</div>
+
+						<div class="light-section">
+							<label class="light-label">Axis</label>
+							<div class="axis-grid">
+								<button data-axis="x" class="active">X</button>
+								<button data-axis="y">Y</button>
+								<button data-axis="z">Z</button>
+							</div>
+						</div>
+
+						<div class="light-section">
+							<div class="light-row">
+								<label class="light-label">Position</label>
+								<span class="light-value" id="val-section">0.00</span>
+							</div>
+							<input
+							  id="slider-section"
+							  type="range"
+							  min="-100"
+							  max="100"
+							  step="0.1"
+							  value="0"
+							  class="light-slider"
+              />
+						</div>
+
+						<div class="light-section">
+							<button id="btn-flip-section" class="wide-btn">⟲ Flip Direction</button>
+						</div>
+
+						<div class="light-section">
+							<button id="btn-reset-section" class="wide-btn">Reset Section</button>
+						</div>
 					</div>
 				</aside>
 
