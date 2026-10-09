@@ -62,6 +62,9 @@ async function fileExists(url: string): Promise<boolean> {
 }
 
 // ============ SELECTOR ============
+// ============ SELECTOR ============
+const PLACEHOLDER_URL = import.meta.env.BASE_URL + 'placeholder.png';
+
 function buildSelector() {
   topicGrid.innerHTML = '';
   for (const topic of topics) {
@@ -73,7 +76,7 @@ function buildSelector() {
           src="${topic.thumbnailUrl}"
           alt="${topic.title} thumbnail"
           loading="lazy"
-          onerror="this.style.display='none'; this.parentElement.insertAdjacentHTML('beforeend', '<div class=&quot;thumb-fallback&quot;>🏗️</div>');"
+          onerror="this.onerror=null; this.src='${PLACEHOLDER_URL}';"
         />
       </div>
       <div class="topic-body">
