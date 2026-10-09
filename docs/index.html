@@ -4,8 +4,8 @@
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>3D Viewer</title>
-		<script type="module" crossorigin src="/3d-viewer/assets/index-BKt6XRRR.js"></script>
-		<link rel="stylesheet" crossorigin href="/3d-viewer/assets/index-t9nDieYZ.css">
+		<script type="module" crossorigin src="/3d-viewer/assets/index-CVvkAXqK.js"></script>
+		<link rel="stylesheet" crossorigin href="/3d-viewer/assets/index-BJjKdVi0.css">
 	</head>
 	<body>
 		<div id="toast" class="toast"></div>
@@ -42,7 +42,16 @@
 			<main>
 				<div id="viewport"></div>
 
-				<!-- OBJECT INFO PANEL (LEFT) -->
+				<!-- LOADING OVERLAY -->
+				<div id="loading-overlay" class="loading-overlay hidden">
+					<div class="spinner"></div>
+					<p id="loading-text">Loading model…</p>
+					<div class="progress-bar">
+						<div id="progress-fill" class="progress-fill"></div>
+					</div>
+					<p id="loading-percent" class="loading-percent">0%</p>
+				</div>
+
 				<aside id="info-panel" class="panel panel-left">
 					<h2>Object Info</h2>
 					<div id="info-content">
@@ -50,7 +59,6 @@
 					</div>
 				</aside>
 
-				<!-- SECTION PANEL (RIGHT) -->
 				<aside id="section-panel" class="panel panel-right hidden">
 					<div class="panel-header">
 						<h2>Section</h2>
@@ -100,7 +108,6 @@
 					</div>
 				</aside>
 
-				<!-- LIGHTS PANEL (RIGHT) -->
 				<aside id="lights-panel" class="panel panel-right hidden">
 					<div class="panel-header">
 						<h2>Lighting</h2>
@@ -124,15 +131,7 @@
 								<label class="light-label">Ambient</label>
 								<span class="light-value" id="val-ambient">0.90</span>
 							</div>
-							<input
-							  id="slider-ambient"
-							  type="range"
-							  min="0"
-							  max="2"
-							  step="0.05"
-							  value="0.9"
-							  class="light-slider"
-              />
+							<input id="slider-ambient" type="range" min="0" max="2" step="0.05" value="0.9" class="light-slider" />
 						</div>
 
 						<div class="light-section">
@@ -140,15 +139,7 @@
 								<label class="light-label">Main light</label>
 								<span class="light-value" id="val-main">1.10</span>
 							</div>
-							<input
-							  id="slider-main"
-							  type="range"
-							  min="0"
-							  max="3"
-							  step="0.05"
-							  value="1.1"
-							  class="light-slider"
-              />
+							<input id="slider-main" type="range" min="0" max="3" step="0.05" value="1.1" class="light-slider" />
 						</div>
 
 						<div class="light-section">
@@ -168,15 +159,7 @@
 								<label class="light-label">Fill light</label>
 								<span class="light-value" id="val-fill">0.40</span>
 							</div>
-							<input
-							  id="slider-fill"
-							  type="range"
-							  min="0"
-							  max="2"
-							  step="0.05"
-							  value="0.4"
-							  class="light-slider"
-              />
+							<input id="slider-fill" type="range" min="0" max="2" step="0.05" value="0.4" class="light-slider" />
 						</div>
 
 						<div class="light-section">

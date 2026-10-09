@@ -2,6 +2,7 @@ import './styles.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { topics, type Topic } from './topics';
 import {
   snapToScreenEndpoint,
@@ -18,6 +19,12 @@ const topicTitle = document.getElementById('topic-title')!;
 const viewport = document.getElementById('viewport')!;
 const infoContent = document.getElementById('info-content')!;
 const toastEl = document.getElementById('toast')!;
+
+// Loading overlay
+const loadingOverlay = document.getElementById('loading-overlay')!;
+const loadingText = document.getElementById('loading-text')!;
+const loadingPercent = document.getElementById('loading-percent')!;
+const progressFill = document.getElementById('progress-fill')!;
 
 // Lights
 const lightsPanel = document.getElementById('lights-panel')!;
@@ -60,6 +67,29 @@ function showToast(
   }, 4500);
 }
 
+// ============ LOADING OVERLAY ============
+function showLoading(text: string) {
+  loadingText.textContent = text;
+  loadingPercent.textContent = '0%';
+  progressFill.style.width = '0%';
+  loadingOverlay.classList.remove('hidden');
+}
+
+function updateLoading(percent: number, text?: string) {
+  const p = Math.min(100, Math.round(percent));
+  loadingPercent.textContent = p + '%';
+  progressFill.style.width = p + '%';
+  if (text) loadingText.textContent = text;
+}
+
+function hideLoading() {
+  loadingOverlay.classList.add('hidden');
+}
+
+// ============ MODEL CACHE ============
+// Key = modelUrl. Value = prepared THREE.Group (already traversed, shadows on).
+const modelCache = new Map<string, THREE.Group>();
+
 // ============ FILE EXISTENCE CHECK ============
 async function fileExists(url: string): Promise<boolean> {
   try {
@@ -86,6 +116,7 @@ function buildSelector() {
           src="${topic.thumbnailUrl}"
           alt="${topic.title} thumbnail"
           loading="lazy"
+          decoding="async"
           onerror="this.onerror=null; this.src='${PLACEHOLDER_URL}';"
         />
       </div>
@@ -126,7 +157,7 @@ const ALLOW_VERTEX_FALLBACK = true;
 let debugCornersOn = false;
 let debugDotGroup: THREE.Group | null = null;
 
-// ============ SECTION STATE ============
+// Section state
 let sectionEnabled = false;
 let sectionAxis: 'x' | 'y' | 'z' = 'x';
 let sectionFlipped = false;
@@ -147,12 +178,15 @@ function initViewer() {
   );
   camera.position.set(15, 12, 15);
 
-  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    powerPreference: 'high-performance'
+  });
   renderer.setSize(viewport.clientWidth, viewport.clientHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.localClippingEnabled = true; // ⬅️ REQUIRED for section
+  renderer.localClippingEnabled = true;
   viewport.appendChild(renderer.domElement);
 
   controls = new OrbitControls(camera, renderer.domElement);
@@ -167,7 +201,14 @@ function initViewer() {
   modelRoot = new THREE.Group();
   scene.add(modelRoot);
 
+  // ---- GLTF Loader with DRACO support ----
   loader = new GLTFLoader();
+
+  const dracoLoader = new DRACOLoader();
+  dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+  dracoLoader.setDecoderConfig({ type: 'js' });
+  loader.setDRACOLoader(dracoLoader);
+
   raycaster = new THREE.Raycaster();
   mouse = new THREE.Vector2();
 
@@ -250,6 +291,18 @@ async function openTopic(topic: Topic) {
   clearModel();
   clearMeasurements();
 
+  // ---------- FAST PATH: cached model ----------
+  const cached = modelCache.get(topic.modelUrl);
+  if (cached) {
+    const clone = cached.clone(true); // shallow clone shares geometries
+    modelRoot.add(clone);
+    frameModel(clone);
+    infoContent.innerHTML =
+      '<p class="hint">Click an object in the model to see its name.</p>';
+    return;
+  }
+
+  // ---------- SLOW PATH: load from disk ----------
   const modelOk = await fileExists(topic.modelUrl);
   if (!modelOk) {
     showToast(`Model not found at ${topic.modelUrl}`, 'error');
@@ -258,63 +311,95 @@ async function openTopic(topic: Topic) {
       <p class="hint">Expected URL:</p>
       <code style="font-size:0.75rem;background:#f8fafc;padding:6px;display:block;border-radius:4px;margin-top:0.4rem;word-break:break-all;">${topic.modelUrl}</code>
     `;
-  } else {
-    loader.load(
-      topic.modelUrl,
-      (gltf) => {
-        const model = gltf.scene;
-        model.traverse((child) => {
-          if ((child as THREE.Mesh).isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-            child.userData.displayName =
-              child.name || (child.parent?.name ?? `Object ${child.id}`);
-          }
-        });
-        modelRoot.add(model);
-
-        const box = new THREE.Box3().setFromObject(model);
-        modelBounds = box.clone();
-        const center = box.getCenter(new THREE.Vector3());
-        const size = box.getSize(new THREE.Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z);
-        const dist = maxDim * 1.8;
-
-        controls.target.copy(center);
-        camera.position.set(
-          center.x + dist,
-          center.y + dist * 0.7,
-          center.z + dist
-        );
-        controls.update();
-
-        lighting.main.target.position.copy(center);
-        lighting.main.target.updateMatrixWorld();
-
-        const half = maxDim * 1.2;
-        lighting.main.shadow.camera.left = -half;
-        lighting.main.shadow.camera.right = half;
-        lighting.main.shadow.camera.top = half;
-        lighting.main.shadow.camera.bottom = -half;
-        lighting.main.shadow.camera.far = maxDim * 10;
-        lighting.main.shadow.camera.updateProjectionMatrix();
-
-        // Reapply section (in case it's on)
-        updateSectionSliderRange();
-        applySection();
-
-        if (debugCornersOn) {
-          debugCornersOn = false;
-          toggleDebugCorners();
-        }
-      },
-      undefined,
-      () => showToast('Could not load model', 'error')
-    );
+    return;
   }
+
+  showLoading(`Loading ${topic.title}…`);
+  const t0 = performance.now();
+
+  loader.load(
+    topic.modelUrl,
+    (gltf) => {
+      const model = gltf.scene;
+
+      model.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        if (!mesh.isMesh) return;
+
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.userData.displayName =
+          mesh.name || (mesh.parent?.name ?? `Object ${mesh.id}`);
+
+        // Small optimization: don't frustum-cull small parts, let the renderer batch
+        mesh.frustumCulled = true;
+      });
+
+      // Cache a pristine copy (before adding to scene, so it stays reusable)
+      modelCache.set(topic.modelUrl, model.clone(true));
+
+      modelRoot.add(model);
+      frameModel(model);
+
+      const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
+      updateLoading(100, `Loaded in ${elapsed}s`);
+      setTimeout(hideLoading, 300);
+
+      if (debugCornersOn) {
+        debugCornersOn = false;
+        toggleDebugCorners();
+      }
+    },
+    (event) => {
+      if (event.lengthComputable) {
+        const pct = (event.loaded / event.total) * 100;
+        updateLoading(pct, `Loading… ${(event.loaded / 1048576).toFixed(1)} / ${(event.total / 1048576).toFixed(1)} MB`);
+      } else {
+        updateLoading(0, `Loading… ${(event.loaded / 1048576).toFixed(1)} MB`);
+      }
+    },
+    (err) => {
+      console.error('Model load error:', err);
+      showToast('Could not load model', 'error');
+      hideLoading();
+    }
+  );
 
   infoContent.innerHTML =
     '<p class="hint">Click an object in the model to see its name.</p>';
+}
+
+// ---------- Frame the model (reused for both cache + fresh load) ----------
+function frameModel(model: THREE.Object3D) {
+  const box = new THREE.Box3().setFromObject(model);
+  modelBounds = box.clone();
+
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const dist = maxDim * 1.8;
+
+  controls.target.copy(center);
+  camera.position.set(
+    center.x + dist,
+    center.y + dist * 0.7,
+    center.z + dist
+  );
+  controls.update();
+
+  lighting.main.target.position.copy(center);
+  lighting.main.target.updateMatrixWorld();
+
+  const half = maxDim * 1.2;
+  lighting.main.shadow.camera.left = -half;
+  lighting.main.shadow.camera.right = half;
+  lighting.main.shadow.camera.top = half;
+  lighting.main.shadow.camera.bottom = -half;
+  lighting.main.shadow.camera.far = maxDim * 10;
+  lighting.main.shadow.camera.updateProjectionMatrix();
+
+  updateSectionSliderRange();
+  applySection();
 }
 
 // ============ CLEAR ============
@@ -322,15 +407,7 @@ function clearModel() {
   while (modelRoot.children.length) {
     const child = modelRoot.children[0];
     modelRoot.remove(child);
-    child.traverse((c) => {
-      const mesh = c as THREE.Mesh;
-      if (mesh.geometry) mesh.geometry.dispose();
-      if (mesh.material) {
-        const mat = mesh.material;
-        if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
-        else mat.dispose();
-      }
-    });
+    // Do NOT dispose geometry/materials — they may be shared with the cache
   }
 }
 
@@ -412,12 +489,7 @@ function onPointerMove(event: MouseEvent) {
   if (measurePoints.length === 1) {
     const positions = previewLine.geometry.attributes
       .position as THREE.BufferAttribute;
-    positions.setXYZ(
-      0,
-      measurePoints[0].x,
-      measurePoints[0].y,
-      measurePoints[0].z
-    );
+    positions.setXYZ(0, measurePoints[0].x, measurePoints[0].y, measurePoints[0].z);
     positions.setXYZ(1, point.x, point.y, point.z);
     positions.needsUpdate = true;
     previewLine.geometry.computeBoundingSphere();
@@ -541,12 +613,7 @@ function toggleDebugCorners() {
       dot.renderOrder = 900;
       dot.position.copy(world);
       const d = camera.position.distanceTo(world);
-      const ws = worldSizeForPixels(
-        6,
-        d,
-        camera,
-        renderer.domElement.clientHeight
-      );
+      const ws = worldSizeForPixels(6, d, camera, renderer.domElement.clientHeight);
       dot.scale.setScalar(ws / 2);
       group.add(dot);
     }
@@ -801,6 +868,7 @@ btnBack.addEventListener('click', () => {
   btnMeasure.classList.remove('active');
   lightsPanel.classList.add('hidden');
   sectionPanel.classList.add('hidden');
+  hideLoading();
   viewerPage.classList.add('hidden');
   selectorPage.classList.remove('hidden');
 });
